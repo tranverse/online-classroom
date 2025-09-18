@@ -1,10 +1,8 @@
 package com.backend.dto.auth;
 
-import lombok.Builder;
 import lombok.Getter;
 
 @Getter
-@Builder
-public class IntrospectRequest {
+public class RefreshTokenRequest {
     private String token;
 }

@@ -1,10 +1,7 @@
 package com.backend.controller;
 
 import com.backend.dto.ApiResponse;
-import com.backend.dto.auth.IntrospectRequest;
-import com.backend.dto.auth.IntrospectResponse;
-import com.backend.dto.auth.UserLoginRequest;
-import com.backend.dto.auth.AuthenticationResponse;
+import com.backend.dto.auth.*;
 import com.backend.service.AuthService;
 import com.nimbusds.jose.JOSEException;
 import lombok.AccessLevel;
@@ -44,4 +41,21 @@ public class AuthController {
         );
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<ApiResponse<Void>> introspect(@RequestBody LogoutRequest logoutRequest) throws ParseException, JOSEException {
+        authService.logout(logoutRequest);
+        return ResponseEntity.ok(
+                ApiResponse.<Void>builder()
+                        .build()
+        );
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<ApiResponse<AuthenticationResponse>> refreshToken(@RequestBody RefreshTokenRequest refreshTokenRequest) throws ParseException, JOSEException {
+        return ResponseEntity.ok(
+                ApiResponse.<AuthenticationResponse>builder()
+                        .data(authService.refreshToken(refreshTokenRequest))
+                        .build()
+        );
+    }
 }

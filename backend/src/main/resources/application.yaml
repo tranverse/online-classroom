@@ -25,4 +25,5 @@ app:
 
 jwt:
   signerKey: 5rSK2/ix9ATiI8r6hXO9bu95ElXbDVLCYMNBZZXTcdYdrrGZIVdv4T2gaJ93ZgYf
-
+  expiration-time: ${EXPIRATION_TIME}
+  refreshable-duration: ${REFRESHABLE_DURATION}

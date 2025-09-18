@@ -1,7 +1,9 @@
 package com.backend.exception;
 
 import com.backend.dto.ApiResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
@@ -11,6 +13,7 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 @ControllerAdvice
+@Slf4j
 public class GlobalExceptionHandler {
     @ExceptionHandler(AppException.class)
     public ResponseEntity<ApiResponse<Void>> handleAppException(AppException e){
@@ -19,18 +22,20 @@ public class GlobalExceptionHandler {
                 .success(false)
                 .code(e.getCode())
                 .build();
-        return ResponseEntity.badRequest().body(apiResponse);
+        return ResponseEntity
+                .status(e.getStatus())
+                .body(apiResponse);
     }
 
-    @ExceptionHandler(Exception.class)
-    public ResponseEntity<ApiResponse<Void>> handleException(Exception e){
-        ApiResponse<Void> apiResponse = ApiResponse.<Void>builder()
-                .message(e.getMessage())
-                .success(false)
-                .code(ErrorCode.UNDEFINED_ERROR.getCode())
-                .build();
-        return ResponseEntity.badRequest().body(apiResponse);
-    }
+//    @ExceptionHandler(Exception.class)
+//    public ResponseEntity<ApiResponse<Void>> handleException(Exception e){
+//        ApiResponse<Void> apiResponse = ApiResponse.<Void>builder()
+//                .message(e.getMessage())
+//                .success(false)
+//                .code(ErrorCode.UNDEFINED_ERROR.getCode())
+//                .build();
+//        return ResponseEntity.badRequest().body(apiResponse);
+//    }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ApiResponse< Map<String, String>>> handleMethodArgumentNotValidException(MethodArgumentNotValidException e){
@@ -52,5 +57,17 @@ public class GlobalExceptionHandler {
                 .data(errorCodes)
                 .build();
         return ResponseEntity.badRequest().body(apiResponse);
+    }
+
+    @ExceptionHandler(AccessDeniedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException e){
+        ErrorCode errorCode = ErrorCode.UNAUTHORIZED;
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(
+                ApiResponse.<Void>builder()
+                        .success(false)
+                        .message(errorCode.getMessage())
+                        .code(errorCode.getCode())
+                        .build()
+        );
     }
 }

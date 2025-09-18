@@ -1,5 +1,6 @@
 package com.backend.config;
 
+import com.backend.security.jwt.CustomJwtDecoder;
 import com.backend.security.jwt.JwtUtil;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -22,8 +23,6 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 import org.springframework.security.oauth2.server.resource.authentication.JwtGrantedAuthoritiesConverter;
 import org.springframework.security.web.SecurityFilterChain;
 
-import javax.crypto.SecretKey;
-import javax.crypto.spec.SecretKeySpec;
 
 @Configuration
 @EnableWebSecurity
@@ -31,25 +30,16 @@ import javax.crypto.spec.SecretKeySpec;
 public class SecurityConfig {
 
 
-    private final String[] PUBLIC_ENDPOINTS = {"/auth/login", "/auth/introspect"};
+    private final String[] PUBLIC_ENDPOINTS = {"/auth/login", "/auth/introspect", "/auth/logout", "/auth/refresh"};
     private final String[] PRIVATE_ENDPOINTS = {"/auth/logout", "/api/user"};
 
-    @Value("${jwt.signerKey}")
-    private String signerKey;
+
 
     @Bean
     PasswordEncoder passwordEncoder() {
         return new BCryptPasswordEncoder();
     }
 
-    @Bean
-    JwtDecoder jwtDecoder() {
-        SecretKeySpec secretKeySpec = new SecretKeySpec(signerKey.getBytes(), "HS512");
-        return NimbusJwtDecoder
-                .withSecretKey(secretKeySpec)
-                .macAlgorithm(MacAlgorithm.HS512)
-                .build();
-    }
 
     @Bean
     JwtAuthenticationConverter jwtAuthenticationConverter() {
@@ -62,7 +52,7 @@ public class SecurityConfig {
         return converter;
     }
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http) throws Exception {
+    SecurityFilterChain filterChain(HttpSecurity http, JwtDecoder jwtDecoder) throws Exception {
         http
                 .csrf(AbstractHttpConfigurer::disable)
                 .authorizeHttpRequests(authorizeRequests -> authorizeRequests
@@ -71,9 +61,11 @@ public class SecurityConfig {
         http
                 .oauth2ResourceServer(oauth2 -> oauth2
                         .jwt(jwtConfigurer -> jwtConfigurer
-                                .decoder(jwtDecoder())
+                                .decoder(jwtDecoder)
                                 .jwtAuthenticationConverter(jwtAuthenticationConverter())
-                        ));
+                        )
+                        .authenticationEntryPoint(new JwtAuthenticationEntryPoint())
+                );
         return http.build();
     }
 }
