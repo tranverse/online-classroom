@@ -1,0 +1,56 @@
+package com.backend.exception;
+
+import com.backend.dto.ApiResponse;
+import org.springframework.http.ResponseEntity;
+import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.annotation.ControllerAdvice;
+import org.springframework.web.bind.annotation.ExceptionHandler;
+
+import java.util.Map;
+import java.util.stream.Collectors;
+
+@ControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(AppException.class)
+    public ResponseEntity<ApiResponse<Void>> handleAppException(AppException e){
+        ApiResponse<Void> apiResponse = ApiResponse.<Void>builder()
+                .message(e.getMessage())
+                .success(false)
+                .code(e.getCode())
+                .build();
+        return ResponseEntity.badRequest().body(apiResponse);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity<ApiResponse<Void>> handleException(Exception e){
+        ApiResponse<Void> apiResponse = ApiResponse.<Void>builder()
+                .message(e.getMessage())
+                .success(false)
+                .code(ErrorCode.UNDEFINED_ERROR.getCode())
+                .build();
+        return ResponseEntity.badRequest().body(apiResponse);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity<ApiResponse< Map<String, String>>> handleMethodArgumentNotValidException(MethodArgumentNotValidException e){
+        Map<String, String> errorCodes = e.getBindingResult().getFieldErrors().stream()
+                .collect(Collectors.toMap(
+                        FieldError::getField,
+                        err -> {
+                            ErrorCode errorCode = ErrorCode.INVALID_KEY;
+                            try{
+                                errorCode = ErrorCode.valueOf(err.getDefaultMessage());
+                            }catch (IllegalArgumentException ignored){}
+                            return errorCode.getMessage();
+                        }
+                ));
+        ApiResponse< Map<String, String>> apiResponse = ApiResponse.< Map<String, String>>builder()
+                .message("Validation fail")
+                .success(false)
+                .code("")
+                .data(errorCodes)
+                .build();
+        return ResponseEntity.badRequest().body(apiResponse);
+    }
+}
