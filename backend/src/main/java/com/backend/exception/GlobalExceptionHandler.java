@@ -3,8 +3,10 @@ package com.backend.exception;
 import com.backend.dto.ApiResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ControllerAdvice;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -62,6 +64,30 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(AccessDeniedException.class)
     public ResponseEntity<ApiResponse<Void>> handleAccessDeniedException(AccessDeniedException e){
         ErrorCode errorCode = ErrorCode.UNAUTHORIZED;
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(
+                ApiResponse.<Void>builder()
+                        .success(false)
+                        .message(errorCode.getMessage())
+                        .code(errorCode.getCode())
+                        .build()
+        );
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpMessageNotReadableException(HttpMessageNotReadableException e){
+        ErrorCode errorCode = ErrorCode.INVALID_REQUEST_FORMAT;
+        return ResponseEntity.status(errorCode.getHttpStatus()).body(
+                ApiResponse.<Void>builder()
+                        .success(false)
+                        .message(errorCode.getMessage())
+                        .code(errorCode.getCode())
+                        .build()
+        );
+    }
+
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ApiResponse<Void>> handleHttpRequestMethodNotSupported(HttpMessageNotReadableException e){
+        ErrorCode errorCode = ErrorCode.METHOD_NOT_SUPPORT;
         return ResponseEntity.status(errorCode.getHttpStatus()).body(
                 ApiResponse.<Void>builder()
                         .success(false)

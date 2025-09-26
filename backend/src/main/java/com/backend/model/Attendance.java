@@ -1,6 +1,7 @@
 package com.backend.model;
 
 import com.backend.enums.AttendanceStatus;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
@@ -30,6 +31,7 @@ public class Attendance {
 
     @ManyToOne
     @JoinColumn(name = "student_id")
+    @JsonBackReference(value = "student_attendance")
     User student;
 
     @ManyToOne

@@ -4,5 +4,5 @@ public enum ClassSessionStatus {
     ONGOING,
     UPCOMING,
     FINISHED,
-    CANCELLED,
+    CANCELLED
 }

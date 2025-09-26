@@ -45,7 +45,7 @@ public class JwtUtil {
                 .subject(user.getEmail())
                 .issuer("online_classroom.com")
                 .issueTime(new Date())
-                .expirationTime(new Date(Instant.now().plus(expirationTime, ChronoUnit.SECONDS).toEpochMilli()))
+                .expirationTime(new Date(Instant.now().plus(expirationTime, ChronoUnit.HOURS).toEpochMilli()))
                 .jwtID(UUID.randomUUID().toString())
                 .claim("role", user.getRole())
                 .claim("id", user.getId())
@@ -70,7 +70,7 @@ public class JwtUtil {
 
         Date expirationDate = (isRefresh)
                 ? new Date(signedJWT.getJWTClaimsSet().getIssueTime().toInstant()
-                    .plus(refreshDuration, ChronoUnit.SECONDS).toEpochMilli())
+                    .plus(refreshDuration, ChronoUnit.HOURS).toEpochMilli())
                 : signedJWT.getJWTClaimsSet().getExpirationTime();
 
         var verified = signedJWT.verify(verifier);

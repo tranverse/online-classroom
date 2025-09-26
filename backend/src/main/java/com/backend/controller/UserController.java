@@ -1,8 +1,8 @@
 package com.backend.controller;
 
 import com.backend.dto.ApiResponse;
-import com.backend.dto.User.UserCreateRequest;
-import com.backend.dto.User.UserResponse;
+import com.backend.dto.user.UserCreateRequest;
+import com.backend.dto.user.UserResponse;
 import com.backend.service.UserService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;

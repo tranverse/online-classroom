@@ -1,4 +1,4 @@
-package com.backend.dto.User;
+package com.backend.dto.user;
 
 import com.backend.enums.Role;
 import jakarta.validation.constraints.*;

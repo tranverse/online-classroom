@@ -1,7 +1,7 @@
 package com.backend.service;
 
-import com.backend.dto.User.UserCreateRequest;
-import com.backend.dto.User.UserResponse;
+import com.backend.dto.user.UserCreateRequest;
+import com.backend.dto.user.UserResponse;
 import com.backend.exception.ErrorCode;
 import com.backend.exception.AppException;
 import com.backend.mapper.UserMapper;

@@ -1,9 +1,8 @@
 package com.backend.model;
 
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.lang.Class;
@@ -13,20 +12,22 @@ import java.time.LocalDate;
 @NoArgsConstructor
 @AllArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
-public class StudentClass {
+@Getter
+@Setter
+public class StudentClassroom {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
     String id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "classroom_id")
-    ClassRoom classRoom;
+    @JoinColumn(name = "classroom_id", nullable = false)
+    @JsonBackReference(value = "classroom_studentClasses")
+    Classroom classroom;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "student_id")
+    @JoinColumn(name = "student_id", nullable = false)
+    @JsonBackReference(value = "student_classroom")
     User student;
-
-    String note;
 
     LocalDate enrollDate;
 

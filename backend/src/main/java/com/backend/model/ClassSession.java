@@ -2,10 +2,9 @@ package com.backend.model;
 
 import com.backend.enums.ClassSessionStatus;
 import com.backend.enums.ClassSessionType;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.NoArgsConstructor;
+import lombok.*;
 import lombok.experimental.FieldDefaults;
 
 import java.time.LocalDateTime;
@@ -15,6 +14,8 @@ import java.util.List;
 @AllArgsConstructor
 @NoArgsConstructor
 @FieldDefaults(level = AccessLevel.PRIVATE)
+@Getter
+@Setter
 public class ClassSession {
     @Id
     @GeneratedValue(strategy = GenerationType.UUID)
@@ -32,7 +33,8 @@ public class ClassSession {
 
     @ManyToOne
     @JoinColumn(name = "classroom_id")
-    ClassRoom classRoom;
+    @JsonBackReference(value = "classroom_classSessions")
+    Classroom classroom;
 
     @Enumerated(EnumType.STRING)
     ClassSessionType sessionType;
