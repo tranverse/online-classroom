@@ -8,6 +8,7 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.web.bind.annotation.RequestParam;
 
+import java.util.List;
 import java.util.Optional;
 
 public interface UserRepository extends JpaRepository<User, String> {
@@ -17,4 +18,6 @@ public interface UserRepository extends JpaRepository<User, String> {
 
     @Query("SELECT u.role FROM User u WHERE u.id = :id ")
     Role findRoleById(@Param("id") String id);
+
+    List<User> findByRole(Role role);
 }

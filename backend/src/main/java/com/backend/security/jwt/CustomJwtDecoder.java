@@ -32,7 +32,7 @@ public class CustomJwtDecoder implements JwtDecoder {
         try {
             var response = authService.introspect(IntrospectRequest.builder().token(token).build());
             if(!response.isValid()){
-              throw new JwtException("Invalid token");
+                throw new JwtException("Invalid token");
             }
         } catch (ParseException  | JOSEException e) {
             throw new JwtException(e.getMessage());

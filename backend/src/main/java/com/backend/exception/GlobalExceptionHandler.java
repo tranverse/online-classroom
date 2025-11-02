@@ -55,7 +55,7 @@ public class GlobalExceptionHandler {
         ApiResponse< Map<String, String>> apiResponse = ApiResponse.< Map<String, String>>builder()
                 .message("Validation fail")
                 .success(false)
-                .code("")
+                .code(ErrorCode.VALIDATION_FAILED.getCode())
                 .data(errorCodes)
                 .build();
         return ResponseEntity.badRequest().body(apiResponse);

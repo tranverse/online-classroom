@@ -2,6 +2,7 @@ package com.backend.service;
 
 import com.backend.dto.user.UserCreateRequest;
 import com.backend.dto.user.UserResponse;
+import com.backend.enums.Role;
 import com.backend.exception.ErrorCode;
 import com.backend.exception.AppException;
 import com.backend.mapper.UserMapper;
@@ -11,6 +12,9 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import org.springframework.stereotype.Service;
+
+import java.util.ArrayList;
+import java.util.List;
 
 @Service
 @RequiredArgsConstructor
@@ -32,5 +36,19 @@ public class UserService {
         }
         User user = userMapper.toUser(userCreateRequest);
         return userMapper.toUserResponse(userRepository.save(user));
+    }
+
+    public List<UserResponse> getTeacherList(Role role){
+        if(role != Role.TEACHER){
+            throw new AppException(ErrorCode.INVALID_ROLE);
+        }
+        List<User> teachers = userRepository.findByRole(role);
+
+        List<UserResponse> userResponses = new ArrayList<>();
+
+        for(User user : teachers){
+            userResponses.add(userMapper.toUserResponse(user));
+        }
+        return userResponses;
     }
 }

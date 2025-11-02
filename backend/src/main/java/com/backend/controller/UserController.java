@@ -3,6 +3,7 @@ package com.backend.controller;
 import com.backend.dto.ApiResponse;
 import com.backend.dto.user.UserCreateRequest;
 import com.backend.dto.user.UserResponse;
+import com.backend.enums.Role;
 import com.backend.service.UserService;
 import jakarta.validation.Valid;
 import lombok.AccessLevel;
@@ -13,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/user")
@@ -45,6 +48,17 @@ public class UserController {
                         .code("user-s-create")
                         .data(userService.createUser(userCreateRequest))
                         .message("Add user successfully")
+                        .build()
+        );
+    }
+
+    @GetMapping("/teacher/{role}")
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getTeacher(@PathVariable Role role) {
+        return ResponseEntity.ok(
+                ApiResponse.<List<UserResponse>>builder()
+                        .code("user-s-get-teacher-list")
+                        .data(userService.getTeacherList(role))
+                        .message("Get teacher list successfully")
                         .build()
         );
     }

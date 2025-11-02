@@ -17,6 +17,9 @@ public enum ErrorCode {
     INVALID_ROLE("4003", "Only teacher can be assigned to a classroom.", HttpStatus.BAD_REQUEST),
     INVALID_DATE("4004", "Date must be now or larger.", HttpStatus.BAD_REQUEST),
     INVALID_REQUEST_FORMAT("4005", "Invalid request format.", HttpStatus.BAD_REQUEST),
+    INVALID_NAME("4006", "Name must not be empty", HttpStatus.BAD_REQUEST),
+    INVALID_QUANTITY("4007", "Quantity must be greater than 0", HttpStatus.BAD_REQUEST),
+    VALIDATION_FAILED("4008", "Validation failed.", HttpStatus.BAD_REQUEST),
     /*401*/
     INCORRECT_PASSWORD("4011", "Incorrect password", HttpStatus.UNAUTHORIZED),
     UNAUTHENTICATED("4012", "Unauthenticated", HttpStatus.UNAUTHORIZED),

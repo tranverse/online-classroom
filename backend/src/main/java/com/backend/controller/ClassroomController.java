@@ -3,6 +3,7 @@ package com.backend.controller;
 import com.backend.dto.ApiResponse;
 import com.backend.dto.classroom.*;
 import com.backend.service.ClassroomService;
+import jakarta.validation.Valid;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -22,7 +23,7 @@ public class ClassroomController {
 
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<ApiResponse<ClassroomResponse>> createClassroom(@RequestBody ClassroomRequest classroomRequest) {
+    public ResponseEntity<ApiResponse<ClassroomResponse>> createClassroom(@Valid @RequestBody ClassroomRequest classroomRequest) {
         return ResponseEntity.ok(
                 ApiResponse.<ClassroomResponse>builder()
                         .message("Create classroom successfully")

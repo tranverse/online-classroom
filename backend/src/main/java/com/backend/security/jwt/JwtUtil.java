@@ -70,7 +70,7 @@ public class JwtUtil {
 
         Date expirationDate = (isRefresh)
                 ? new Date(signedJWT.getJWTClaimsSet().getIssueTime().toInstant()
-                    .plus(refreshDuration, ChronoUnit.HOURS).toEpochMilli())
+                .plus(refreshDuration, ChronoUnit.HOURS).toEpochMilli())
                 : signedJWT.getJWTClaimsSet().getExpirationTime();
 
         var verified = signedJWT.verify(verifier);
