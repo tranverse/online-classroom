@@ -12,6 +12,7 @@ export interface Classroom {
   name: string;
   teacher: User;
   studentCount: number;
+  quantity?: number;
   status: "ACTIVE" | "INACTIVE";
   createdAt: string;
 }

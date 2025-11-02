@@ -1,22 +1,22 @@
 package com.backend.service;
 
+import java.time.LocalDateTime;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+
 import com.backend.dto.attendance.AttendanceRequest;
 import com.backend.dto.attendance.AttendanceResponse;
 import com.backend.enums.AttendanceStatus;
 import com.backend.model.Attendance;
-import com.backend.model.ClassSession;
-import com.backend.model.User;
 import com.backend.repository.AttendanceRepository;
 import com.backend.repository.ClassSessionRepository;
 import com.backend.repository.UserRepository;
+
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
-import lombok.AccessLevel;
-import org.springframework.stereotype.Service;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -61,5 +61,30 @@ public class AttendanceService {
         r.setNote(a.getNote());
         r.setStatus(a.getStatus());
         return r;
+    }
+
+    public AttendanceResponse overrideAttendance(String attendanceId, com.backend.dto.AttendanceUpdateRequest request) {
+        Attendance attendance = attendanceRepository.findById(attendanceId).orElseThrow();
+        attendance.setStatus(request.getStatus());
+        attendance.setNote(request.getVerificationNote());
+        // persist update
+        Attendance saved = attendanceRepository.save(attendance);
+        return toResponse(saved);
+    }
+
+    public long countAllAttendances() {
+        return attendanceRepository.count();
+    }
+
+    public com.backend.dto.admin.AttendanceStats getAttendanceStats() {
+        List<Attendance> all = attendanceRepository.findAll();
+        long total = all.size();
+        long present = all.stream().filter(a -> a.getStatus() == AttendanceStatus.PRESENT).count();
+        long suspicious = all.stream().filter(a -> a.getStatus() == com.backend.enums.AttendanceStatus.FAKE_DETECTED).count();
+        com.backend.dto.admin.AttendanceStats s = new com.backend.dto.admin.AttendanceStats();
+        s.setTotal(total);
+        s.setPresent(present);
+        s.setSuspicious(suspicious);
+        return s;
     }
 }

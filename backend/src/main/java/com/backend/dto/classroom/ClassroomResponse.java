@@ -10,6 +10,7 @@ import java.time.LocalDate;
 @Getter
 @Setter
 public class ClassroomResponse {
+    String id;
     String name;
     LocalDate startDate;
     LocalDate endDate;

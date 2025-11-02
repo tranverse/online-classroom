@@ -28,7 +28,7 @@ public class Classroom {
 
     Integer quantity;
 
-    Boolean isDeleted;
+    Boolean isDeleted = Boolean.FALSE;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "teacher_id")

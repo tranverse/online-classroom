@@ -47,6 +47,12 @@ public class Attendance {
     @JoinColumn(name = "class_session_id")
     ClassSession classSession;
 
+    // audit and verification fields
+    LocalDateTime createdAt;
+    LocalDateTime updatedAt;
+    LocalDateTime verifiedAt;
+    Boolean manuallyVerified;
+
 
 
 }

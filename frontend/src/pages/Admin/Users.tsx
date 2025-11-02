@@ -1,4 +1,55 @@
 import React, { useState, useEffect } from "react";
+
+// Small ErrorBoundary to surface rendering errors inside modal dialogs
+class ErrorBoundary extends React.Component<
+  { children: React.ReactNode },
+  { hasError: boolean; error?: Error | null }
+> {
+  constructor(props: any) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, info: any) {
+    // eslint-disable-next-line no-console
+    console.error("ErrorBoundary caught an error:", error, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="p-4 bg-red-50 border border-red-200 rounded">
+          <h4 className="text-red-700 font-semibold mb-2">Rendering error</h4>
+          <pre className="text-sm text-red-600">{String(this.state.error)}</pre>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+// Simple toast component (local, minimal)
+const Toast: React.FC<{ message: string; type?: "success" | "error" }> = ({
+  message,
+  type = "success",
+}) => {
+  if (!message) return null;
+  return (
+    <div
+      className={`fixed right-6 top-6 z-50 px-4 py-2 rounded-md shadow-md text-sm ${
+        type === "success"
+          ? "bg-green-50 text-green-800"
+          : "bg-red-50 text-red-800"
+      }`}
+    >
+      {message}
+    </div>
+  );
+};
 import { User } from "../../types/admin";
 import { AdminService } from "../../services/admin.service";
 import { DataTable } from "../../components/DataTable";
@@ -6,6 +57,7 @@ import { DataTable } from "../../components/DataTable";
 interface UserFormData {
   name: string;
   email: string;
+  phone: string;
   role: User["role"];
   status: User["status"];
 }
@@ -14,30 +66,63 @@ const UserForm: React.FC<{
   onSubmit: (data: UserFormData) => Promise<void>;
   onCancel: () => void;
   initialData?: Partial<UserFormData>;
-}> = ({ onSubmit, onCancel, initialData }) => {
+  onSuccess?: (message: string) => void;
+  onError?: (message: string) => void;
+}> = ({ onSubmit, onCancel, initialData, onSuccess, onError }) => {
   const [formData, setFormData] = useState<UserFormData>({
     name: initialData?.name || "",
     email: initialData?.email || "",
+    phone: initialData?.phone || "",
     role: initialData?.role || "STUDENT",
     status: initialData?.status || "ACTIVE",
   });
+  const [submitting, setSubmitting] = useState(false);
+  const [errors, setErrors] = useState<
+    Partial<Record<keyof UserFormData, string>>
+  >({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    await onSubmit(formData);
+    // validate phone: digits only, length 10-15
+    const phoneClean = formData.phone.replace(/\D/g, "");
+    const newErrors: Partial<Record<keyof UserFormData, string>> = {};
+    if (!/^[0-9]{10,15}$/.test(phoneClean)) {
+      newErrors.phone = "Phone must be 10 to 15 digits";
+    }
+    if (!formData.name.trim()) newErrors.name = "Name is required";
+    if (!formData.email.trim()) newErrors.email = "Email is required";
+
+    setErrors(newErrors);
+    if (Object.keys(newErrors).length > 0) {
+      onError?.("Please fix form validation errors");
+      return;
+    }
+
+    setSubmitting(true);
+    try {
+      await onSubmit({ ...formData, phone: phoneClean });
+      onSuccess?.("User saved successfully");
+    } catch (err: any) {
+      onError?.(err?.message || "Failed to save user");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form id="user-form" onSubmit={handleSubmit} className="space-y-4">
       <div>
         <label className="block text-sm font-medium text-gray-700">Name</label>
         <input
           type="text"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+          className="mt-1 block w-full rounded-xl border-gray-200 shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:text-sm p-2"
           required
         />
+        {errors.name && (
+          <p className="text-xs text-red-600 mt-1">{errors.name}</p>
+        )}
       </div>
 
       <div>
@@ -46,9 +131,27 @@ const UserForm: React.FC<{
           type="email"
           value={formData.email}
           onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+          className="mt-1 block w-full rounded-xl border-gray-200 shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:text-sm p-2"
           required
         />
+        {errors.email && (
+          <p className="text-xs text-red-600 mt-1">{errors.email}</p>
+        )}
+      </div>
+
+      <div>
+        <label className="block text-sm font-medium text-gray-700">Phone</label>
+        <input
+          type="tel"
+          value={formData.phone}
+          onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+          className="mt-1 block w-full rounded-xl border-gray-200 shadow-md focus:border-blue-500 focus:ring-2 focus:ring-blue-100 sm:text-sm p-2"
+          placeholder="Digits only, 10-15 characters"
+          required
+        />
+        {errors.phone && (
+          <p className="text-xs text-red-600 mt-1">{errors.phone}</p>
+        )}
       </div>
 
       <div>
@@ -90,21 +193,22 @@ const UserForm: React.FC<{
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          disabled={submitting}
+          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 rounded-md"
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+          disabled={submitting}
+          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 rounded-md"
         >
-          Save
+          {submitting ? "Saving..." : "Save"}
         </button>
       </div>
     </form>
   );
 };
-
 const Modal: React.FC<{
   open: boolean;
   onClose: () => void;
@@ -114,20 +218,39 @@ const Modal: React.FC<{
   if (!open) return null;
 
   return (
-    <div className="fixed inset-0 z-10 overflow-y-auto">
-      <div className="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
-        <div
-          className="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity"
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-gray-800 bg-opacity-60">
+      <div className="bg-white rounded-lg shadow-lg max-w-lg w-full p-6 relative">
+        <button
           onClick={onClose}
-        />
-        <span className="hidden sm:inline-block sm:h-screen sm:align-middle">
-          &#8203;
-        </span>
-        <div className="inline-block align-bottom bg-white rounded-lg text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full">
-          <div className="bg-white px-4 pt-5 pb-4 sm:p-6 sm:pb-4">
-            <h3 className="text-lg font-medium text-gray-900 mb-4">{title}</h3>
-            {children}
-          </div>
+          className="absolute top-3 right-3 text-gray-500 hover:text-gray-700"
+        >
+          ✕
+        </button>
+        <h3 className="text-lg font-semibold mb-4">{title}</h3>
+        <div className="mb-4">
+          <ErrorBoundary>{children}</ErrorBoundary>
+        </div>
+
+        <div className="mt-4 border-t pt-4 flex justify-end gap-3">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const form = document.querySelector(
+                "#user-form"
+              ) as HTMLFormElement | null;
+              if (form) form.requestSubmit();
+            }}
+            className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+          >
+            Save
+          </button>
         </div>
       </div>
     </div>
@@ -141,6 +264,10 @@ export const UsersPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [toast, setToast] = useState<{
+    message: string;
+    type?: "success" | "error";
+  } | null>(null);
   const pageSize = 10;
 
   const fetchUsers = async () => {
@@ -163,9 +290,11 @@ export const UsersPage: React.FC = () => {
   const handleCreateUser = async (data: UserFormData) => {
     try {
       await AdminService.createUser(data);
+      setToast({ message: "✅ User created successfully", type: "success" });
       setModalOpen(false);
       fetchUsers();
     } catch (error) {
+      setToast({ message: "Failed to create user", type: "error" });
       console.error("Failed to create user:", error);
     }
   };
@@ -174,10 +303,12 @@ export const UsersPage: React.FC = () => {
     if (!editingUser) return;
     try {
       await AdminService.updateUser(editingUser.id, data);
+      setToast({ message: "✅ User updated successfully", type: "success" });
       setModalOpen(false);
       setEditingUser(null);
       fetchUsers();
     } catch (error) {
+      setToast({ message: "Failed to update user", type: "error" });
       console.error("Failed to update user:", error);
     }
   };
@@ -271,15 +402,19 @@ export const UsersPage: React.FC = () => {
         }}
         title={editingUser ? "Edit User" : "Add User"}
       >
-        <UserForm
-          onSubmit={editingUser ? handleUpdateUser : handleCreateUser}
-          onCancel={() => {
-            setModalOpen(false);
-            setEditingUser(null);
-          }}
-          initialData={editingUser || undefined}
-        />
+        {/* Wrap form in an error boundary so rendering errors show a diagnostic instead of a blank overlay */}
+        <ErrorBoundary>
+          <UserForm
+            onSubmit={editingUser ? handleUpdateUser : handleCreateUser}
+            onCancel={() => {
+              setModalOpen(false);
+              setEditingUser(null);
+            }}
+            initialData={editingUser || undefined}
+          />
+        </ErrorBoundary>
       </Modal>
+      {toast && <Toast message={toast.message} type={toast.type} />}
     </div>
   );
 };

@@ -1,6 +1,15 @@
 package com.backend.service;
 
-import com.backend.dto.classroom.*;
+import java.util.List;
+import java.util.stream.Collectors;
+
+import org.springframework.stereotype.Service;
+
+import com.backend.dto.classroom.ClassroomRequest;
+import com.backend.dto.classroom.ClassroomResponse;
+import com.backend.dto.classroom.RemoveStudentRequest;
+import com.backend.dto.classroom.StudentClassroomRequest;
+import com.backend.dto.classroom.StudentClassroomResponse;
 import com.backend.enums.Role;
 import com.backend.exception.AppException;
 import com.backend.exception.ErrorCode;
@@ -11,15 +20,12 @@ import com.backend.model.StudentClassroom;
 import com.backend.repository.ClassroomRepository;
 import com.backend.repository.StudentClassroomRepository;
 import com.backend.repository.UserRepository;
+
 import jakarta.transaction.Transactional;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Service;
-
-import java.util.List;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -73,9 +79,14 @@ public class ClassroomService {
         return classroomMapper.toClassroomResponse(classroom);
     }
 
+    public List<StudentClassroomResponse> getStudentsForClassroom(String classroomId) {
+        var links = studentClassroomRepository.findByClassroomId(classroomId);
+        return links.stream().map(studentClassroomMapper::toStudentClassroomResponse).collect(Collectors.toList());
+    }
+
 
     public List<ClassroomResponse> getAllClassrooms() {
-        List<Classroom> classrooms = classroomRepository.findAll();
+        List<Classroom> classrooms = classroomRepository.findAllByIsDeletedFalse();
         return classrooms.stream().map(classroomMapper::toClassroomResponse).collect(Collectors.toList());
     }
 
@@ -89,10 +100,10 @@ public class ClassroomService {
 
     @Transactional
     public Void removeStudentClassroom(RemoveStudentRequest removeStudentRequest) {
-        Classroom classroom = classroomRepository.findById(removeStudentRequest.getClassroomId()).orElseThrow();
+        // verify classroom exists (throws if not)
+        classroomRepository.findById(removeStudentRequest.getClassroomId()).orElseThrow();
 
-        studentClassroomRepository.deleteByStudentIdAndClassroomId(removeStudentRequest.getStudentId(),
-                removeStudentRequest.getClassroomId());
+        studentClassroomRepository.deleteByStudentIdAndClassroomId(removeStudentRequest.getStudentId(), removeStudentRequest.getClassroomId());
 
         return null;
     }

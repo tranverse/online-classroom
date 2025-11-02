@@ -5,5 +5,7 @@ public enum AttendanceStatus {
     ABSENT,
     LATE,
     LEFT_EARLY,
+    PENDING,
+    FAKE_DETECTED,
     UNVERIFIED,
 }

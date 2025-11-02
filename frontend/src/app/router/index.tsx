@@ -15,7 +15,7 @@ import { UsersPage } from "@pages/Admin/Users";
 import { ClassroomsPage } from "@pages/Admin/Classrooms";
 import { SessionsPage } from "@pages/Admin/Sessions";
 import { AttendancePage } from "@pages/Admin/Attendance";
-
+import ClassroomDetailsPage from "@pages/Admin/ClassroomDetails";
 const routes = [
   // Public/Home
   {
@@ -37,6 +37,11 @@ const routes = [
   {
     path: "/admin/classrooms",
     Page: ClassroomsPage,
+    Layout: AdminLayout,
+  },
+  {
+    path: "/admin/classrooms/:id",
+    Page: ClassroomDetailsPage,
     Layout: AdminLayout,
   },
   {

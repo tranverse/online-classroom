@@ -1,13 +1,9 @@
 package com.backend.service;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -15,17 +11,11 @@ import org.springframework.transaction.annotation.Transactional;
 import com.backend.dto.AttendanceDTO;
 import com.backend.dto.AttendanceUpdateRequest;
 import com.backend.dto.ClassSessionRequest;
-import com.backend.dto.user.UserCreateRequest;
-import com.backend.dto.user.UserResponse;
 import com.backend.enums.AttendanceStatus;
 import com.backend.enums.ClassSessionStatus;
-import com.backend.enums.Role;
-import com.backend.exception.AppException;
-import com.backend.exception.ErrorCode;
 import com.backend.exception.ResourceNotFoundException;
 import com.backend.exception.UnauthorizedAccessException;
 import com.backend.mapper.AttendanceMapper;
-import com.backend.mapper.UserMapper;
 import com.backend.model.Attendance;
 import com.backend.model.ClassSession;
 import com.backend.model.ClassStatistics;
@@ -36,77 +26,18 @@ import com.backend.repository.ClassSessionRepository;
 import com.backend.repository.ClassroomRepository;
 import com.backend.repository.UserRepository;
 
-import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
-import lombok.experimental.FieldDefaults;
 
 @Service
 @RequiredArgsConstructor
-@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
-public class UserService {
-    final UserRepository userRepository;
-    final UserMapper userMapper;
-    final ClassroomRepository classroomRepository;
-    final ClassSessionRepository sessionRepository;
-    final AttendanceRepository attendanceRepository;
-    final AttendanceMapper attendanceMapper;
+public class TeacherService {
 
-    public UserResponse getUserInformation(String email) {
-        User user = userRepository.findByEmail(email).orElseThrow(() ->
-                new AppException(ErrorCode.USER_NOT_FOUND));
-        return userMapper.toUserResponse(user);
-    }
+    private final ClassroomRepository classroomRepository;
+    private final UserRepository userRepository;
+    private final ClassSessionRepository sessionRepository;
+    private final AttendanceRepository attendanceRepository;
+    private final AttendanceMapper attendanceMapper;
 
-    public UserResponse createUser(UserCreateRequest userCreateRequest) {
-        if(userRepository.existsByEmailAndRole(userCreateRequest.getEmail(), userCreateRequest.getRole())) {
-            throw new AppException(ErrorCode.EMAIL_EXISTED);
-        }
-        User user = userMapper.toUser(userCreateRequest);
-        return userMapper.toUserResponse(userRepository.save(user));
-    }
-
-    public List<UserResponse> getTeacherList(Role role){
-        if(role != Role.TEACHER){
-            throw new AppException(ErrorCode.INVALID_ROLE);
-        }
-        List<User> teachers = userRepository.findByRole(role);
-
-        List<UserResponse> userResponses = new ArrayList<>();
-
-        for(User user : teachers){
-            userResponses.add(userMapper.toUserResponse(user));
-        }
-        return userResponses;
-    }
-
-    // Admin helpers
-    public Page<User> getAllUsers(int page, int pageSize) {
-        Pageable pageable = PageRequest.of(page - 1, pageSize);
-        return userRepository.findAll(pageable);
-    }
-
-    public UserResponse updateUser(String id, UserCreateRequest request) {
-        User user = userRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        // update allowed fields
-        if (request.getName() != null) user.setName(request.getName());
-        if (request.getEmail() != null) user.setEmail(request.getEmail());
-        if (request.getPhone() != null) user.setPhone(request.getPhone());
-        if (request.getRole() != null) user.setRole(request.getRole());
-        return userMapper.toUserResponse(userRepository.save(user));
-    }
-
-    public void deleteUser(String id) {
-        User user = userRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        userRepository.delete(user);
-    }
-
-    public UserResponse assignRole(String id, Role role) {
-        User user = userRepository.findById(id).orElseThrow(() -> new AppException(ErrorCode.USER_NOT_FOUND));
-        user.setRole(role);
-        return userMapper.toUserResponse(userRepository.save(user));
-    }
-
-    // --- Teacher logic moved from TeacherService ---
     private User getCurrentTeacher() {
         String email = SecurityContextHolder.getContext().getAuthentication().getName();
         return userRepository.findByEmail(email)
@@ -165,7 +96,7 @@ public class UserService {
         session.setEndTime(request.getEndTime());
         session.setLink(request.getMeetingUrl());
         session.setNote(request.getDescription());
-        session.setSessionType(request.getSessionType());
+    session.setSessionType(request.getSessionType());
     session.setSessionStatus(ClassSessionStatus.UPCOMING);
 
         session = sessionRepository.save(session);
