@@ -1,14 +1,28 @@
 package com.backend.model;
 
+import java.time.LocalDateTime;
+import java.util.List;
+
 import com.backend.enums.ClassSessionStatus;
 import com.backend.enums.ClassSessionType;
 import com.fasterxml.jackson.annotation.JsonBackReference;
-import jakarta.persistence.*;
-import lombok.*;
-import lombok.experimental.FieldDefaults;
 
-import java.time.LocalDateTime;
-import java.util.List;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
+import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+import lombok.experimental.FieldDefaults;
 
 @Entity
 @AllArgsConstructor
@@ -37,9 +51,11 @@ public class ClassSession {
     Classroom classroom;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 32)
     ClassSessionType sessionType;
 
     @Enumerated(EnumType.STRING)
+    @Column(length = 32)
     ClassSessionStatus sessionStatus;
 
     @OneToMany(mappedBy = "classSession")

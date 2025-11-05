@@ -15,9 +15,8 @@ export class DocumentService {
 
   static async uploadFile(formData: FormData) {
     const response = await axios.post("/api/documents/upload", formData, {
-      headers: {
-        "Content-Type": "multipart/form-data",
-      },
+      // Do not set Content-Type manually for FormData. Browser/axios will add the
+      // correct Content-Type including boundary.
       onUploadProgress: (progressEvent) => {
         const percentCompleted = Math.round(
           (progressEvent.loaded * 100) / (progressEvent.total || 1)

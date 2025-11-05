@@ -2,80 +2,26 @@ import axios from "../tools/axios.tool";
 
 const BASE = "/api/student";
 
-const mock = {
-  dashboard: {
-    totalClasses: 3,
-    upcomingSessions: 5,
-    attendanceRate: 86,
-  },
-  classrooms: [
-    {
-      id: "c1",
-      name: "Intro to Algorithms",
-      teacher: { id: "t1", name: "Dr. Lee" },
-      studentCount: 42,
-      joinedAt: "2025-01-15",
-    },
-    {
-      id: "c2",
-      name: "Linear Algebra",
-      teacher: { id: "t2", name: "Prof. Kim" },
-      studentCount: 30,
-      joinedAt: "2025-02-01",
-    },
-  ],
-  classDetails: {
-    classroom: {
-      id: "c1",
-      name: "Intro to Algorithms",
-      description: "Algorithms basics and problem solving.",
-      teacher: { id: "t1", name: "Dr. Lee" },
-      createdAt: "2025-01-01",
-    },
-    students: [
-      { id: "s1", name: "Alice" },
-      { id: "s2", name: "Bob" },
-    ],
-    sessions: [
-      {
-        id: "s1",
-        title: "Sorting",
-        startTime: "2025-11-05T10:00:00",
-        endTime: "2025-11-05T11:30:00",
-        status: "SCHEDULED",
-      },
-    ],
-  },
-};
-
 export const StudentService = {
   getDashboardStats: async () => {
     try {
       const { data } = await axios.get(`${BASE}/dashboard/stats`);
       return data?.data;
-    } catch (e) {
-      return new Promise((res) => setTimeout(() => res(mock.dashboard), 200));
-    }
+    } catch (e) {}
   },
 
   getClassrooms: async () => {
     try {
       const { data } = await axios.get(`${BASE}/classrooms`);
       return data?.data;
-    } catch (e) {
-      return new Promise((res) => setTimeout(() => res(mock.classrooms), 200));
-    }
+    } catch (e) {}
   },
 
   getClassroomDetails: async (id: string) => {
     try {
       const { data } = await axios.get(`${BASE}/classrooms/${id}`);
       return data?.data;
-    } catch (e) {
-      return new Promise((res) =>
-        setTimeout(() => res(mock.classDetails), 200)
-      );
-    }
+    } catch (e) {}
   },
 
   joinByCode: async (code: string) => {
@@ -95,11 +41,7 @@ export const StudentService = {
         `${BASE}/classrooms/${classroomId}/members`
       );
       return data?.data;
-    } catch (e) {
-      return new Promise((res) =>
-        setTimeout(() => res(mock.classDetails.students), 200)
-      );
-    }
+    } catch (e) {}
   },
 
   getSessions: async (classroomId: string) => {
@@ -108,10 +50,21 @@ export const StudentService = {
         `${BASE}/classrooms/${classroomId}/sessions`
       );
       return data?.data;
+    } catch (e) {}
+  },
+
+  getUpcomingSessions: async (classroomId: string) => {
+    try {
+      // student-facing endpoint that returns upcoming sessions across student's classes
+      const { data } = await axios.get(`${BASE}/sessions/upcoming`);
+      // server returns all upcoming sessions for the student; filter by classroom if classroomId provided
+      const all: any[] = data?.data || [];
+      if (classroomId)
+        return all.filter((s) => s.classroom?.id === classroomId);
+      return all;
     } catch (e) {
-      return new Promise((res) =>
-        setTimeout(() => res(mock.classDetails.sessions), 200)
-      );
+      // fallback to full sessions list
+      return StudentService.getSessions(classroomId);
     }
   },
 
@@ -165,9 +118,10 @@ export const StudentService = {
     try {
       const form = new FormData();
       form.append("photo", file);
-      const { data } = await axios.post(`${BASE}/attendance/photo`, form, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
+      // Do not manually set Content-Type for FormData — the browser will add
+      // the required multipart boundary. Manually setting it can break
+      // multipart parsing on the server and cause 500 errors.
+      const { data } = await axios.post(`${BASE}/attendance/photo`, form);
       return data?.data;
     } catch (err: any) {
       // If server returned 401, surface it so caller can handle auth
@@ -176,6 +130,53 @@ export const StudentService = {
       return new Promise((res) =>
         setTimeout(() => res({ success: true }), 800)
       );
+    }
+  },
+  // face endpoints
+  getFaceChallenge: async () => {
+    try {
+      const { data } = await axios.get(`/api/face/challenge`);
+      return data?.data;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  enrollEmbedding: async (
+    classroomId: string,
+    embedding: number[],
+    studentId?: string
+  ) => {
+    try {
+      const payload: any = { embedding };
+      if (studentId) payload.studentId = studentId;
+      const { data } = await axios.post(
+        `/api/face/enroll/${classroomId}`,
+        payload
+      );
+      return data?.data;
+    } catch (e) {
+      return null;
+    }
+  },
+
+  checkFaceAttendance: async (
+    classroomId: string,
+    sessionId: string,
+    embedding: number[],
+    challengeMetrics: any,
+    studentId?: string
+  ) => {
+    try {
+      const payload: any = { embedding, challengeMetrics };
+      if (studentId) payload.studentId = studentId;
+      const { data } = await axios.post(
+        `/api/face/check/${classroomId}/${sessionId}`,
+        payload
+      );
+      return data?.data;
+    } catch (e) {
+      return null;
     }
   },
   verifyAttendance: async (

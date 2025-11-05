@@ -13,7 +13,7 @@ async function loadFaceApi(): Promise<any> {
   const scriptUrl =
     "https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js";
   await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector(`script[src=\"${scriptUrl}\"]`);
+    const existing = document.querySelector(`script[src="${scriptUrl}"]`);
     if (existing) return resolve();
     const s = document.createElement("script");
     s.src = scriptUrl;
@@ -35,6 +35,7 @@ const AttendanceUpload: React.FC = () => {
   const [verifying, setVerifying] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const [cameraOn, setCameraOn] = useState(false);
   const toast = useToast();
 
   useEffect(() => {
@@ -58,25 +59,29 @@ const AttendanceUpload: React.FC = () => {
     };
   }, []);
 
+  // start camera on demand
+  const startCamera = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCameraOn(true);
+    } catch (err) {
+      console.warn("Camera access denied", err);
+      toast?.show ? toast.show("Camera access denied", "error") : null;
+    }
+  };
+
+  const stopCamera = () => {
+    const tracks = (videoRef.current?.srcObject as MediaStream)?.getTracks?.();
+    tracks?.forEach((t) => t.stop());
+    if (videoRef.current) videoRef.current.srcObject = null;
+    setCameraOn(false);
+  };
+
   useEffect(() => {
-    // setup camera stream when component mounts
-    const startCam = async () => {
-      try {
-        const stream = await navigator.mediaDevices.getUserMedia({
-          video: true,
-        });
-        if (videoRef.current) videoRef.current.srcObject = stream;
-      } catch (err) {
-        console.warn("Camera access denied", err);
-      }
-    };
-    startCam();
     return () => {
-      // stop camera
-      const tracks = (
-        videoRef.current?.srcObject as MediaStream
-      )?.getTracks?.();
-      tracks?.forEach((t) => t.stop());
+      // cleanup on unmount
+      stopCamera();
     };
   }, []);
 
@@ -222,12 +227,35 @@ const AttendanceUpload: React.FC = () => {
             </label>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="text-sm text-gray-600">Camera</div>
+                  <div className="flex gap-2">
+                    {!cameraOn ? (
+                      <button
+                        onClick={startCamera}
+                        className="px-3 py-1 bg-blue-600 text-white rounded"
+                      >
+                        Start Camera
+                      </button>
+                    ) : (
+                      <button
+                        onClick={stopCamera}
+                        className="px-3 py-1 bg-red-500 text-white rounded"
+                      >
+                        Stop Camera
+                      </button>
+                    )}
+                  </div>
+                </div>
+
                 <video
                   ref={videoRef}
                   autoPlay
                   playsInline
                   muted
-                  className="w-full h-56 object-cover rounded-xl border border-gray-200"
+                  className={`w-full h-56 object-cover rounded-xl border border-gray-200 ${
+                    !cameraOn ? "opacity-50" : ""
+                  }`}
                 />
                 <canvas ref={canvasRef} className="hidden" />
                 <div className="flex gap-2">
@@ -236,15 +264,20 @@ const AttendanceUpload: React.FC = () => {
                       // snapshot preview from camera
                       captureFromVideo().then((url) => setPhotoPreview(url));
                     }}
-                    className="px-3 py-2 bg-blue-600 text-white rounded"
+                    disabled={!cameraOn}
+                    className={`px-3 py-2 ${
+                      !cameraOn
+                        ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                        : "bg-blue-600 text-white"
+                    } rounded`}
                   >
                     Capture
                   </button>
                   <button
                     onClick={onVerify}
-                    disabled={!modelsLoaded || verifying}
+                    disabled={!modelsLoaded || verifying || !cameraOn}
                     className={`px-3 py-2 rounded text-white ${
-                      !modelsLoaded || verifying
+                      !modelsLoaded || verifying || !cameraOn
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-green-600 hover:bg-green-700"
                     }`}

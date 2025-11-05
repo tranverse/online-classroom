@@ -13,13 +13,27 @@ const StudentDashboard: React.FC = () => {
     const load = async () => {
       try {
         const classrooms = await StudentService.getClassrooms();
-        // classrooms may be an array of { id, name, ... }
+        // classrooms may be an array of { id, name, teacher, ... }
         const sessionsPerClass = await Promise.all(
           (classrooms || []).map(async (c: any) => {
-            const s = await StudentService.getSessions(c.id);
-            return Array.isArray(s)
-              ? s.map((ss) => ({ ...ss, classroomId: c.id }))
-              : [];
+            const s = await StudentService.getUpcomingSessions(c.id);
+            // normalize fields: backend returns startTime, frontend expects 'start'
+            if (!Array.isArray(s)) return [];
+            return s.map((ss: any) => {
+              const startRaw =
+                ss.startTime || ss.start || ss.start_date || null;
+              const start = startRaw
+                ? new Date(startRaw).toLocaleString()
+                : null;
+              const teacherName =
+                ss.teacher || (c && c.teacher && c.teacher.name) || "TBA";
+              return {
+                ...ss,
+                classroomId: c.id,
+                start,
+                teacher: teacherName,
+              };
+            });
           })
         );
         const flat = sessionsPerClass.flat();
@@ -30,6 +44,7 @@ const StudentDashboard: React.FC = () => {
     };
     load();
   }, []);
+  console.log("sessions", sessions);
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">

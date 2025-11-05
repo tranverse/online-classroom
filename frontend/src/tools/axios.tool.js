@@ -2,9 +2,11 @@ import axios from "axios";
 
 export const axiosInstance = axios.create({
   baseURL: import.meta.env.VITE_SERVER_URL,
-  headers: {
-    "Content-Type": "application/json",
-  },
+  // Do not set a global Content-Type header here. Let axios determine the
+  // proper Content-Type per request body (e.g., multipart/form-data for
+  // FormData, application/json for plain objects). Setting it globally
+  // prevents axios/browser from adding the multipart boundary and causes
+  // servers to return 415 or multipart parsing errors.
 });
 
 axiosInstance.interceptors.request.use(

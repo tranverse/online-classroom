@@ -51,26 +51,18 @@ const ClassSessionEntry: React.FC = () => {
           </p>
           <button
             onClick={async () => {
-              // Try to verify attendance status by calling backend list and checking latest record for this user
               try {
                 const base = getApiBase();
-                const endpoint = `${base}/api/class-session/${id}/attendance`;
-                // axios interceptor will add Authorization
+                const endpoint = `${base}/api/class-session/${id}/attendance/me`;
                 const response = await axios.get(endpoint);
                 const json = response?.data;
-                const list = json?.data || [];
-                const userId = localStorage.getItem("userId");
-                const found = list.find(
-                  (a: any) =>
-                    a.isPassed === true &&
-                    (!userId || (a.student && a.student.id === userId))
-                );
-                if (found) {
+                const info = json?.data;
+                if (info && info.isPassed) {
                   setAttended(true);
-                  setAttendanceInfo(found);
+                  setAttendanceInfo(info);
                 } else {
                   alert(
-                    "No successful attendance found yet. Please mark attendance."
+                    "You haven't been marked present yet. Please mark attendance."
                   );
                 }
               } catch (err) {

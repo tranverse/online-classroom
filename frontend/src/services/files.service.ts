@@ -15,9 +15,8 @@ const FilesService = {
     const form = new FormData();
     form.append("file", file);
     const url = `${BASE}/upload${folderId ? `?folderId=${folderId}` : ""}`;
-    const { data } = await axios.post(url, form, {
-      headers: { "Content-Type": "multipart/form-data" },
-    });
+    // Let the browser set Content-Type (including boundary) for FormData.
+    const { data } = await axios.post(url, form);
     return data?.data;
   },
 

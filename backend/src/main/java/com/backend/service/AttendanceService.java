@@ -69,6 +69,15 @@ public class AttendanceService {
                 .collect(Collectors.toList());
     }
 
+    public AttendanceResponse getLatestAttendanceForUser(String classSessionId, String userId) {
+        return attendanceRepository.findAllByClassSessionId(classSessionId).stream()
+                .filter(a -> a.getStudent() != null && a.getStudent().getId().equals(userId))
+                .sorted((a, b) -> b.getAttendanceTime().compareTo(a.getAttendanceTime()))
+                .map(this::toResponse)
+                .findFirst()
+                .orElse(null);
+    }
+
     private AttendanceResponse toResponse(Attendance a) {
         AttendanceResponse r = new AttendanceResponse();
         r.setId(a.getId());

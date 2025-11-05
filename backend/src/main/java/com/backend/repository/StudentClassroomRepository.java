@@ -14,4 +14,7 @@ public interface StudentClassroomRepository extends JpaRepository<StudentClassro
 
     // find all student-classroom links for a given classroom
     List<StudentClassroom> findByClassroomId(String classroomId);
+
+    // find all links for a given student
+    List<StudentClassroom> findByStudentId(String studentId);
 }

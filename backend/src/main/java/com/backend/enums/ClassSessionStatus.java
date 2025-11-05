@@ -1,8 +1,12 @@
 package com.backend.enums;
 
+/**
+ * Session status values. Keep names aligned with frontend option values.
+ */
 public enum ClassSessionStatus {
-    ONGOING,
-    UPCOMING,
-    FINISHED,
-    CANCELLED
+    SCHEDULED,
+    IN_PROGRESS,
+    COMPLETED,
+    CANCELLED,
+    UPCOMING
 }

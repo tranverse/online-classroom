@@ -185,7 +185,16 @@ public class AdminController {
 
     @PutMapping("/sessions/{id}")
     public ResponseEntity<ApiResponse<ClassSessionResponse>> updateSession(@PathVariable String id, @RequestBody ClassSessionRequest request) {
-        return ResponseEntity.ok(ApiResponse.<ClassSessionResponse>builder().code("admin-session-update").message("Update session").data(classSessionService.updateClassSession(request, id)).build());
+        // Validate incoming id to avoid attempts to merge an entity with value 'undefined' or empty
+        if (id == null || id.isBlank() || "undefined".equalsIgnoreCase(id)) {
+            return ResponseEntity.badRequest().body(ApiResponse.<ClassSessionResponse>builder().code("admin-session-update-invalid-id").message("Invalid session id").data(null).build());
+        }
+        try {
+            var resp = classSessionService.updateClassSession(request, id);
+            return ResponseEntity.ok(ApiResponse.<ClassSessionResponse>builder().code("admin-session-update").message("Update session").data(resp).build());
+        } catch (IllegalArgumentException ex) {
+            return ResponseEntity.status(404).body(ApiResponse.<ClassSessionResponse>builder().code("admin-session-not-found").message(ex.getMessage()).data(null).build());
+        }
     }
 
     @DeleteMapping("/sessions/{id}")

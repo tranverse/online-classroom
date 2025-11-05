@@ -17,6 +17,7 @@ import { ClassroomsPage } from "@pages/Admin/Classrooms";
 import { SessionsPage } from "@pages/Admin/Sessions";
 import { AttendancePage } from "@pages/Admin/Attendance";
 import ClassroomDetailsPage from "@pages/Admin/ClassroomDetails";
+import AdminAssignments from "@pages/Admin/Assignments";
 
 //student
 import ProfilePage from "@pages/Student/Profile";
@@ -24,6 +25,7 @@ import ClassroomDetails from "@pages/Student/ClassroomDetails";
 import ProfileAttendance from "@pages/Student/ProfileAttendance";
 import AttendanceUpload from "@pages/Student/AttendanceUpload";
 import FilesPage from "@pages/Student/Files";
+import StudentAssignments from "@pages/Student/Assignments";
 
 const routes = [
   // Public/Home
@@ -56,6 +58,11 @@ const routes = [
   {
     path: "/admin/sessions",
     Page: SessionsPage,
+    Layout: AdminLayout,
+  },
+  {
+    path: "/admin/assignments",
+    Page: AdminAssignments,
     Layout: AdminLayout,
   },
   {
@@ -109,6 +116,11 @@ const routes = [
   {
     path: "/student/files",
     Page: FilesPage,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/assignments",
+    Page: StudentAssignments,
     Layout: StudentLayout,
   },
   // Auth

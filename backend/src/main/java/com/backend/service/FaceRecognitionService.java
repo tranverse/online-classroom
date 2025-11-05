@@ -1,76 +1,140 @@
 package com.backend.service;
 
+import java.nio.charset.StandardCharsets;
+import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.Base64;
+import java.util.List;
 import java.util.Map;
+import java.util.Optional;
+import java.util.stream.Collectors;
 
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
-import org.springframework.web.client.RestTemplate;
 
-import lombok.AccessLevel;
-import lombok.experimental.FieldDefaults;
+import com.backend.anti.FakeDetector;
+import com.backend.model.FaceEmbedding;
+import com.backend.repository.FaceEmbeddingRepository;
+import com.backend.util.CryptoUtil;
+import com.backend.util.FaceUtils;
 
 @Service
-@FieldDefaults(level = AccessLevel.PRIVATE)
 public class FaceRecognitionService {
-    final RestTemplate restTemplate = new RestTemplate();
+    private final FaceEmbeddingRepository faceEmbeddingRepository;
+    private final FakeDetector fakeDetector;
 
-    @Value("${ai.face.service.url:http://localhost:5001}")
-    String aiServiceUrl;
+    @Value("${app.face.similarity.threshold:0.6}")
+    private double similarityThreshold;
 
-    public static class MatchResult {
-        public boolean matched;
-        public double similarity;
-        public double livenessScore;
+    @Value("${EMBEDDING_ENCRYPTION_KEY:}")
+    private String encryptionKeyBase64;
+
+    @Autowired
+    public FaceRecognitionService(FaceEmbeddingRepository faceEmbeddingRepository, FakeDetector fakeDetector) {
+        this.faceEmbeddingRepository = faceEmbeddingRepository;
+        this.fakeDetector = fakeDetector;
     }
 
-    @SuppressWarnings("unchecked")
-    public MatchResult analyze(String imageBase64) {
-        MatchResult r = new MatchResult();
-        try {
-            String url = aiServiceUrl + "/analyze";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            Map<String, String> body = Map.of("imageBase64", imageBase64 == null ? "" : imageBase64);
-            HttpEntity<Map<String, String>> entity = new HttpEntity<>(body, headers);
-            Map<String, Object> resp = restTemplate.postForObject(url, entity, Map.class);
-            if (resp != null) {
-                r.matched = Boolean.TRUE.equals(resp.get("matched"));
-                Object sim = resp.get("similarity");
-                Object liv = resp.get("livenessScore");
-                r.similarity = sim == null ? 0.0 : Double.parseDouble(String.valueOf(sim));
-                r.livenessScore = liv == null ? 0.0 : Double.parseDouble(String.valueOf(liv));
-            }
-    } catch (org.springframework.web.client.RestClientException ex) {
-            // fallback to local heuristic
-            int len = imageBase64 == null ? 0 : imageBase64.length();
-            r.similarity = Math.min(1.0, (len % 100) / 100.0 + 0.2);
-            r.livenessScore = Math.min(1.0, ((len / 3) % 100) / 100.0 + 0.1);
-            r.matched = r.similarity > 0.4 && r.livenessScore > 0.2;
-        }
-        return r;
+    public Map<String, Object> randomChallenge() {
+        String[] opts = new String[] {"blink", "turn_left", "turn_right", "open_mouth"};
+        String c = opts[new java.util.Random().nextInt(opts.length)];
+        return java.util.Collections.singletonMap("challenge", c);
     }
 
-    @SuppressWarnings("unchecked")
-    public java.util.List<Double> extractDescriptor(String imageBase64) {
-        try {
-            String url = aiServiceUrl + "/extract";
-            HttpHeaders headers = new HttpHeaders();
-            headers.setContentType(MediaType.APPLICATION_JSON);
-            java.util.Map<String, String> body = java.util.Map.of("imageBase64", imageBase64 == null ? "" : imageBase64);
-            HttpEntity<java.util.Map<String, String>> entity = new HttpEntity<>(body, headers);
-            java.util.Map<String, Object> resp = restTemplate.postForObject(url, entity, java.util.Map.class);
-            if (resp != null && resp.get("descriptor") != null) {
-                Object d = resp.get("descriptor");
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                java.util.List<Double> desc = mapper.convertValue(d, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
-                return desc;
-            }
-        } catch (org.springframework.web.client.RestClientException ex) {
-            // ignore
+    public void saveEmbedding(String studentId, String classroomId, double[] embedding) throws Exception {
+        FaceEmbedding fe = new FaceEmbedding();
+        fe.setStudentId(studentId);
+        fe.setClassroomId(classroomId);
+        String json = toJson(embedding);
+        if (encryptionKeyBase64 != null && !encryptionKeyBase64.isBlank()) {
+            fe.setEncryptedEmbedding(CryptoUtil.encrypt(encryptionKeyBase64, json.getBytes(StandardCharsets.UTF_8)));
+        } else {
+            fe.setEncryptedEmbedding(Base64.getEncoder().encodeToString(json.getBytes(StandardCharsets.UTF_8)));
         }
-        return java.util.Collections.emptyList();
+        fe.setCreatedAt(LocalDateTime.now());
+        faceEmbeddingRepository.save(fe);
+    }
+
+    public List<double[]> loadEmbeddingsForClassroom(String classroomId) {
+        List<FaceEmbedding> list = faceEmbeddingRepository.findAllByClassroomId(classroomId);
+        List<double[]> out = new ArrayList<>();
+        for (FaceEmbedding fe : list) {
+            try {
+                String stored = fe.getEncryptedEmbedding();
+                byte[] raw;
+                if (encryptionKeyBase64 != null && !encryptionKeyBase64.isBlank()) {
+                    raw = CryptoUtil.decrypt(encryptionKeyBase64, stored);
+                } else {
+                    raw = Base64.getDecoder().decode(stored);
+                }
+                String json = new String(raw, StandardCharsets.UTF_8);
+                out.add(fromJson(json));
+            } catch (Exception ex) {
+                // ignore malformed
+            }
+        }
+        return out;
+    }
+
+    public boolean verify(double[] probe, List<double[]> gallery) {
+        for (double[] g : gallery) {
+            double sim = FaceUtils.cosineSimilarity(probe, g);
+            if (sim >= similarityThreshold) return true;
+        }
+        return false;
+    }
+
+    public Map<String, Object> validateLiveness(Map<String, Object> challengeMetrics) {
+        return fakeDetector.validate(challengeMetrics);
+    }
+
+    private static String toJson(double[] arr) {
+        StringBuilder sb = new StringBuilder();
+        sb.append('[');
+        for (int i = 0; i < arr.length; i++) {
+            if (i > 0) sb.append(',');
+            sb.append(arr[i]);
+        }
+        sb.append(']');
+        return sb.toString();
+    }
+
+    private static double[] fromJson(String json) {
+        String t = json.trim();
+        if (t.startsWith("[")) t = t.substring(1);
+        if (t.endsWith("]")) t = t.substring(0, t.length()-1);
+        String[] parts = t.split(",");
+        double[] out = new double[parts.length];
+        for (int i = 0; i < parts.length; i++) out[i] = Double.parseDouble(parts[i]);
+        return out;
+    }
+
+    // Accept either a raw JSON array string like "[0.1,0.2,...]" or a base64 encoded JSON payload
+    // Return descriptor as a List<Double> for compatibility with older services.
+    public java.util.List<Double> extractDescriptor(String imageBase64OrJson) {
+        if (imageBase64OrJson == null) return java.util.Collections.emptyList();
+        String s = imageBase64OrJson.trim();
+        // if looks like base64, try decode
+        try {
+            // heuristics: contains only base64 chars and no brackets
+            if (!s.startsWith("[") && s.matches("^[A-Za-z0-9+/=\\r\\n]+$") ) {
+                byte[] decoded = Base64.getDecoder().decode(s);
+                s = new String(decoded, StandardCharsets.UTF_8).trim();
+            }
+        } catch (Exception ex) {
+            // fallback to original string
+        }
+
+        // now expect s to be a JSON array like [0.1,0.2,...]
+        try {
+            double[] arr = fromJson(s);
+            java.util.List<Double> out = new java.util.ArrayList<>(arr.length);
+            for (double v : arr) out.add(v);
+            return out;
+        } catch (Exception ex) {
+            return java.util.Collections.emptyList();
+        }
     }
 }
+

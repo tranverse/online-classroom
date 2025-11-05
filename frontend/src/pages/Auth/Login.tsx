@@ -17,7 +17,14 @@ const Login: React.FC = () => {
       const resultAction = await dispatch(loginUser(data));
       if (loginUser.fulfilled.match(resultAction)) {
         toast.success("Login successful");
-        navigate("/");
+        // resultAction.payload should be the user object
+        const user =
+          (resultAction.payload as any) ||
+          JSON.parse(localStorage.getItem("user") || "null");
+        const role = user?.role;
+        if (role === "ADMIN") navigate("/admin");
+        else if (role === "TEACHER") navigate("/teacher");
+        else navigate("/student");
       } else {
         toast.error((resultAction.payload as string) || "Login failed");
       }

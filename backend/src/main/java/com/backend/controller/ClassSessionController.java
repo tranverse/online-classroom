@@ -122,4 +122,18 @@ public class ClassSessionController {
                         .build()
         );
     }
+
+    @GetMapping("/{classSessionId}/attendance/me")
+    @PreAuthorize("hasAnyRole('STUDENT')")
+    public ResponseEntity<ApiResponse<AttendanceResponse>> getMyAttendance(@PathVariable String classSessionId) {
+        // student id is retrieved from security context in service layer or controller
+        String userId = null;
+        try {
+            userId = org.springframework.security.core.context.SecurityContextHolder.getContext().getAuthentication().getName();
+        } catch (Exception ex) {
+            // ignore
+        }
+        AttendanceResponse r = attendanceService.getLatestAttendanceForUser(classSessionId, userId);
+        return ResponseEntity.ok(ApiResponse.<AttendanceResponse>builder().message("My attendance").data(r).build());
+    }
 }

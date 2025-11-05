@@ -15,6 +15,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Lob;
 import jakarta.persistence.OneToMany;
 import lombok.AllArgsConstructor;
 import lombok.Data;
@@ -44,7 +45,8 @@ public class User {
     @Column(nullable = true)
     private String avatar;
 
-    @Column(nullable = true)
+    @Lob
+    @Column(columnDefinition = "LONGTEXT", nullable = true)
     private String faceData;
 
 //    @Column(nullable = false)

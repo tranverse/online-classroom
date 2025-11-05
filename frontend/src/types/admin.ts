@@ -24,6 +24,9 @@ export interface Session {
   startTime: string;
   endTime: string;
   status: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
+  sessionType?: "LARGE_CLASS" | "SMALL_CLASS" | "ONE_TO_ONE";
+  note?: string;
+  link?: string;
 }
 
 export interface Attendance {
