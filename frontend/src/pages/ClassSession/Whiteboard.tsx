@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import { useAppSelector } from "../../store/hooks";
 
 type Tool = "pen" | "eraser" | "text" | "rect";
 
@@ -20,6 +21,18 @@ const Whiteboard: React.FC = () => {
     value: string;
     visible: boolean;
   }>({ x: 0, y: 0, value: "", visible: false });
+
+  // get current user from redux to determine permissions
+  const user = useAppSelector((s) => s.user.user as any);
+  const isTeacher = user?.role === "TEACHER";
+
+  // multi-whiteboard support (in-memory)
+  const [boards, setBoards] = useState<number[]>([0]);
+  const [currentBoardIndex, setCurrentBoardIndex] = useState<number>(0);
+  // store dataUrls for each board id
+  const [boardImages, setBoardImages] = useState<Record<number, string | null>>(
+    { 0: null }
+  );
 
   useEffect(() => {
     const canvas = canvasRef.current!;
@@ -78,6 +91,7 @@ const Whiteboard: React.FC = () => {
 
   const start = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
+    if (!isTeacher) return; // only teachers can start drawing
     const pos = getPos(e as unknown as MouseEvent);
     const ctx = ctxRef.current!;
     if (tool === "pen" || tool === "eraser") {
@@ -108,6 +122,7 @@ const Whiteboard: React.FC = () => {
 
   const move = (e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
+    if (!isTeacher) return; // block move/draw for non-teachers
     const pos = getPos(e as unknown as MouseEvent);
     const ctx = ctxRef.current!;
     if (drawing.current) {
@@ -135,6 +150,7 @@ const Whiteboard: React.FC = () => {
   };
 
   const stop = (e?: React.MouseEvent | React.TouchEvent) => {
+    if (!isTeacher) return; // ignore stop if drawing wasn't allowed
     const ctx = ctxRef.current!;
     if (drawing.current) {
       drawing.current = false;
@@ -170,6 +186,60 @@ const Whiteboard: React.FC = () => {
     ctx.restore();
   };
 
+  const saveCurrentBoardImage = () => {
+    const canvas = canvasRef.current!;
+    try {
+      const data = canvas.toDataURL("image/png");
+      const id = boards[currentBoardIndex];
+      setBoardImages((prev) => ({ ...prev, [id]: data }));
+    } catch (err) {
+      // ignore
+    }
+  };
+
+  const loadBoardImage = (id: number) => {
+    const data = boardImages[id];
+    const ctx = ctxRef.current!;
+    const canvas = canvasRef.current!;
+    clear();
+    if (data) {
+      const img = new Image();
+      img.onload = () => {
+        // draw into the canvas respecting pixel ratio
+        ctx.save();
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        // scale image to canvas CSS size
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const ratio = devicePixelRatio || 1;
+        ctx.drawImage(img, 0, 0, canvas.width / ratio, canvas.height / ratio);
+        ctx.restore();
+      };
+      img.src = data;
+    }
+  };
+
+  const addBoard = () => {
+    // save current board first
+    saveCurrentBoardImage();
+    const id = Date.now();
+    setBoards((b) => [...b, id]);
+    setBoardImages((prev) => ({ ...prev, [id]: null }));
+    setCurrentBoardIndex(boards.length); // new index
+    // clear canvas after a tick
+    setTimeout(() => clear(), 10);
+  };
+
+  const switchBoard = (index: number) => {
+    if (index === currentBoardIndex) return;
+    saveCurrentBoardImage();
+    setCurrentBoardIndex(index);
+    // load after state updates
+    setTimeout(() => {
+      const id = boards[index];
+      loadBoardImage(id);
+    }, 10);
+  };
+
   const download = () => {
     const canvas = canvasRef.current!;
     const url = canvas.toDataURL("image/png");
@@ -185,33 +255,41 @@ const Whiteboard: React.FC = () => {
         <div className="flex gap-1 items-center">
           <button
             onClick={() => setTool("pen")}
+            disabled={!isTeacher}
+            title={!isTeacher ? "Read-only: teachers only" : "Pen"}
             className={`px-2 py-1 border rounded ${
               tool === "pen" ? "bg-gray-200" : ""
-            }`}
+            } ${!isTeacher ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             Pen
           </button>
           <button
             onClick={() => setTool("eraser")}
+            disabled={!isTeacher}
+            title={!isTeacher ? "Read-only: teachers only" : "Eraser"}
             className={`px-2 py-1 border rounded ${
               tool === "eraser" ? "bg-gray-200" : ""
-            }`}
+            } ${!isTeacher ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             Eraser
           </button>
           <button
             onClick={() => setTool("rect")}
+            disabled={!isTeacher}
+            title={!isTeacher ? "Read-only: teachers only" : "Rect"}
             className={`px-2 py-1 border rounded ${
               tool === "rect" ? "bg-gray-200" : ""
-            }`}
+            } ${!isTeacher ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             Rect
           </button>
           <button
             onClick={() => setTool("text")}
+            disabled={!isTeacher}
+            title={!isTeacher ? "Read-only: teachers only" : "Text"}
             className={`px-2 py-1 border rounded ${
               tool === "text" ? "bg-gray-200" : ""
-            }`}
+            } ${!isTeacher ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             Text
           </button>
@@ -222,8 +300,11 @@ const Whiteboard: React.FC = () => {
             type="color"
             value={color}
             onChange={(e) => setColor(e.target.value)}
-            className="w-8 h-8 p-0"
+            className={`w-8 h-8 p-0 ${
+              !isTeacher ? "opacity-50 cursor-not-allowed" : ""
+            }`}
             title="Color"
+            disabled={!isTeacher}
           />
         </label>
 
@@ -235,6 +316,8 @@ const Whiteboard: React.FC = () => {
             value={lineWidth}
             onChange={(e) => setLineWidth(Number(e.target.value))}
             title="Brush size"
+            disabled={!isTeacher}
+            className={`${!isTeacher ? "opacity-50 cursor-not-allowed" : ""}`}
           />
         </label>
 
@@ -246,15 +329,55 @@ const Whiteboard: React.FC = () => {
             value={fontSize}
             onChange={(e) => setFontSize(Number(e.target.value))}
             title="Font size"
+            disabled={!isTeacher}
+            className={`${!isTeacher ? "opacity-50 cursor-not-allowed" : ""}`}
           />
         </label>
 
-        <button onClick={clear} className="px-2 py-1 border rounded">
+        <button
+          onClick={clear}
+          className={`px-2 py-1 border rounded ${
+            !isTeacher ? "opacity-50 cursor-not-allowed" : ""
+          }`}
+          disabled={!isTeacher}
+        >
           Clear
         </button>
         <button onClick={download} className="px-2 py-1 border rounded">
           Download
         </button>
+
+        <div className="ml-2 flex items-center gap-2">
+          <button
+            onClick={addBoard}
+            disabled={!isTeacher}
+            title={
+              !isTeacher ? "Only teachers can add boards" : "Add whiteboard"
+            }
+            className={`px-2 py-1 border rounded ${
+              !isTeacher ? "opacity-50 cursor-not-allowed" : ""
+            }`}
+          >
+            + New Board
+          </button>
+          <div className="flex gap-1 items-center">
+            {boards.map((b, idx) => (
+              <button
+                key={b}
+                onClick={() => switchBoard(idx)}
+                className={`px-2 py-1 border rounded ${
+                  idx === currentBoardIndex ? "bg-gray-200" : ""
+                }`}
+              >
+                {idx + 1}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {!isTeacher && (
+          <div className="ml-2 text-sm text-gray-500">Read-only</div>
+        )}
       </div>
 
       <div

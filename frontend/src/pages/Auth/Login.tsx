@@ -3,34 +3,38 @@ import Form from "@components/Form";
 import InputField from "@components/Form/InputField";
 import Heading from "@components/Heading";
 import SubmitButton from "@components/Form/SubmitButton";
-import AuthService from "@services/auth.service";
 import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
-const Login = () => {
+import { useAppDispatch } from "../../store/hooks";
+import { loginUser } from "../../store/userSlice";
+
+const Login: React.FC = () => {
   const navigate = useNavigate();
+  const dispatch = useAppDispatch();
 
-  const handleSubmit = async (data: {}, reset: {}) => {
-    const response = await AuthService.login(data);
-    console.log(response);
-    if (response.success) {
-      navigate("/");
-      localStorage.setItem("token", response.data.token);
-      toast.success(response.message);
-    } else {
-      toast.error(response.message);
+  const handleSubmit = async (data: { email: string; password: string }) => {
+    try {
+      const resultAction = await dispatch(loginUser(data));
+      if (loginUser.fulfilled.match(resultAction)) {
+        toast.success("Login successful");
+        navigate("/");
+      } else {
+        toast.error((resultAction.payload as string) || "Login failed");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Login error");
     }
-
-    console.log(data);
   };
+
   return (
     <div className="flex justify-center items-center h-screen flex-col gap-10 bg-gradient-to-br from-[var(--secondary-color)]/10 to-[var(--primary-color)]/40">
-      <div className=" p-10 w-md  flex flex-col gap-10 shadow-lg  shadow-green-500/20 rounded-lg border bg-white border-green-200">
+      <div className="p-10 w-md flex flex-col gap-10 shadow-lg shadow-green-500/20 rounded-lg border bg-white border-green-200">
         <Heading
-          className={"text-3xl text-[var(--primary-color)]"}
-          name={"Login"}
+          className="text-3xl text-[var(--primary-color)]"
+          name="Login"
         />
         <Form onSubmit={handleSubmit}>
-          <div className="flex flex-col gap-5 ">
+          <div className="flex flex-col gap-5">
             <InputField
               label="Email"
               name="email"
@@ -48,7 +52,7 @@ const Login = () => {
                 Forgot password?
               </div>
             </div>
-            <SubmitButton name={"Login"} type="submit" />
+            <SubmitButton name="Login" type="submit" />
           </div>
         </Form>
       </div>

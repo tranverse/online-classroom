@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import ClassroomService from "@services/classroom.service";
-import ClassSessionService from "@services/classSession.service";
+import StudentService from "@services/student.service";
 import { Link } from "react-router-dom";
 import { FaChalkboardTeacher } from "react-icons/fa";
 import { IoCalendarOutline } from "react-icons/io5";
@@ -9,11 +9,22 @@ const StudentDashboard: React.FC = () => {
   const [sessions, setSessions] = useState<any[]>([]);
 
   useEffect(() => {
+    // load only sessions that belong to the student's classrooms
     const load = async () => {
-      const res = await ClassSessionService.getAll();
-      if (res?.success) {
-        setSessions(res.data || []);
-      } else {
+      try {
+        const classrooms = await StudentService.getClassrooms();
+        // classrooms may be an array of { id, name, ... }
+        const sessionsPerClass = await Promise.all(
+          (classrooms || []).map(async (c: any) => {
+            const s = await StudentService.getSessions(c.id);
+            return Array.isArray(s)
+              ? s.map((ss) => ({ ...ss, classroomId: c.id }))
+              : [];
+          })
+        );
+        const flat = sessionsPerClass.flat();
+        setSessions(flat || []);
+      } catch (e) {
         setSessions([]);
       }
     };

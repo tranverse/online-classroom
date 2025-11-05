@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import axios from "@tools/axios.tool";
 import { useParams } from "react-router-dom";
 import AttendanceCapture from "./components/AttendanceCapture";
 import ClassSession from "./index";
@@ -53,15 +54,11 @@ const ClassSessionEntry: React.FC = () => {
               // Try to verify attendance status by calling backend list and checking latest record for this user
               try {
                 const base = getApiBase();
-                const token = localStorage.getItem("token");
-                const res = await fetch(
-                  `${base}/api/class-session/${id}/attendance`,
-                  {
-                    headers: token ? { Authorization: `Bearer ${token}` } : {},
-                  }
-                );
-                const json = await res.json();
-                const list = json.data || [];
+                const endpoint = `${base}/api/class-session/${id}/attendance`;
+                // axios interceptor will add Authorization
+                const response = await axios.get(endpoint);
+                const json = response?.data;
+                const list = json?.data || [];
                 const userId = localStorage.getItem("userId");
                 const found = list.find(
                   (a: any) =>

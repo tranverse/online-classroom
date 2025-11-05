@@ -26,17 +26,33 @@ public class AttendanceService {
     ClassSessionRepository classSessionRepository;
     UserRepository userRepository;
     FaceRecognitionService faceRecognitionService;
+    com.backend.service.StudentFaceService studentFaceService;
 
     public AttendanceResponse submitAttendance(String classSessionId, String userId, AttendanceRequest request) {
         Attendance attendance = new Attendance();
         attendance.setAttendanceTime(LocalDateTime.now());
 
-        // Run face recognition/liveness
-        FaceRecognitionService.MatchResult result = faceRecognitionService.analyze(request.getImageBase64());
+        // Run face recognition: extract descriptor from image
+        java.util.List<Double> descriptor = faceRecognitionService.extractDescriptor(request.getImageBase64());
 
-        attendance.setIsPassed(result.matched);
-        attendance.setNote("similarity=" + result.similarity + ", liveness=" + result.livenessScore);
-        attendance.setStatus(result.matched ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT);
+        boolean matched = false;
+        double minDist = Double.MAX_VALUE;
+        try {
+            if (descriptor != null && !descriptor.isEmpty() && userId != null) {
+                java.util.List<java.util.List<Double>> stored = studentFaceService.getDescriptorsForUser(userId);
+                for (java.util.List<Double> s : stored) {
+                    double d = StudentFaceService.euclidean(s, descriptor);
+                    if (d < minDist) minDist = d;
+                    if (d <= 0.58) matched = true; // threshold
+                }
+            }
+        } catch (Exception ex) {
+            // ignore
+        }
+
+        attendance.setIsPassed(matched);
+        attendance.setNote("minDistance=" + (minDist == Double.MAX_VALUE ? "-" : minDist));
+        attendance.setStatus(matched ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT);
 
         // Link student and class session if available
         if (userId != null) userRepository.findById(userId).ifPresent(attendance::setStudent);

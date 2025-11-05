@@ -1,4 +1,5 @@
 import React, { useRef, useEffect, useState } from "react";
+import axios from "@tools/axios.tool";
 
 interface Props {
   classSessionId: string;
@@ -108,7 +109,6 @@ const AttendanceCapture: React.FC<Props> = ({
     const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
 
     try {
-      const token = localStorage.getItem("token");
       const basePath = apiUrl ? `${apiUrl}` : "";
       const endpoint = basePath
         ? `${basePath}/api/class-session/${classSessionId}/attendance${
@@ -118,38 +118,25 @@ const AttendanceCapture: React.FC<Props> = ({
             userId ? "?userId=" + userId : ""
           }`;
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ imageBase64: dataUrl.split(",")[1] }),
+      // axios instance will attach Authorization header via interceptor
+      const resp = await axios.post(endpoint, {
+        imageBase64: dataUrl.split(",")[1],
       });
+      const json = resp?.data;
 
-      if (!res.ok) {
-        setMessage(`HTTP ${res.status} ${res.statusText}`);
-      } else {
-        let json: any = null;
+      if (!json) {
+        setMessage("No response data");
+      } else if (json && json.data) {
+        setMessage(JSON.stringify(json.data));
         try {
-          const text = await res.text();
-          json = text ? JSON.parse(text) : null;
+          const info = json.data;
+          if (info.isPassed || info.status === "PRESENT")
+            if (typeof onSuccess === "function") onSuccess(info);
         } catch (e) {
-          console.error("Failed to parse JSON response", e);
+          // ignore
         }
-
-        if (json && json.data) {
-          setMessage(JSON.stringify(json.data));
-          try {
-            const info = json.data;
-            if (info.isPassed || info.status === "PRESENT")
-              if (typeof onSuccess === "function") onSuccess(info);
-          } catch (e) {
-            // ignore
-          }
-        } else {
-          setMessage("No response data");
-        }
+      } else {
+        setMessage("No response data");
       }
     } catch (err) {
       console.error(err);

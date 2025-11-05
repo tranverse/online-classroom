@@ -10,7 +10,7 @@
     "forceConsistentCasingInFileNames": true,
     "moduleResolution": "bundler",
     "jsx": "react-jsx",
-    
+
     "baseUrl": "./src",
     "paths": {
       "@pages/*": ["pages/*"],
@@ -22,7 +22,8 @@
       "@services/*": ["services/*"],
       "@styles/*": ["styles/*"],
       "@utils/*": ["utils/*"],
-      "@tools/*": ["tools/*"]
+      "@tools/*": ["tools/*"],
+      "@store/*": ["store/*"]
     }
   },
   "include": ["src"],

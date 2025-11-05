@@ -13,9 +13,18 @@ import AdminLayout from "@layouts/AdminLayout";
 import { AdminDashboard } from "@pages/Admin/Dashboard";
 import { UsersPage } from "@pages/Admin/Users";
 import { ClassroomsPage } from "@pages/Admin/Classrooms";
+
 import { SessionsPage } from "@pages/Admin/Sessions";
 import { AttendancePage } from "@pages/Admin/Attendance";
 import ClassroomDetailsPage from "@pages/Admin/ClassroomDetails";
+
+//student
+import ProfilePage from "@pages/Student/Profile";
+import ClassroomDetails from "@pages/Student/ClassroomDetails";
+import ProfileAttendance from "@pages/Student/ProfileAttendance";
+import AttendanceUpload from "@pages/Student/AttendanceUpload";
+import FilesPage from "@pages/Student/Files";
+
 const routes = [
   // Public/Home
   {
@@ -75,6 +84,31 @@ const routes = [
   {
     path: "/student/dashboard",
     Page: StudentDashboard,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/classrooms",
+    Page: ClassroomsPage,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/classrooms/:id",
+    Page: ClassroomDetails,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/profile",
+    Page: ProfilePage,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/profile-attendance",
+    Page: AttendanceUpload,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/files",
+    Page: FilesPage,
     Layout: StudentLayout,
   },
   // Auth

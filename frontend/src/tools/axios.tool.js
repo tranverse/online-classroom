@@ -9,7 +9,16 @@ export const axiosInstance = axios.create({
 
 axiosInstance.interceptors.request.use(
   (config) => {
-    const token = localStorage.getItem("token");
+    // support both storing token directly under 'token' or inside a saved 'user' object
+    let token = localStorage.getItem("token");
+    if (!token) {
+      try {
+        const user = JSON.parse(localStorage.getItem("user") || "null");
+        if (user && user.token) token = user.token;
+      } catch (e) {
+        // ignore
+      }
+    }
     if (token) {
       config.headers["Authorization"] = `Bearer ${token}`;
     }
