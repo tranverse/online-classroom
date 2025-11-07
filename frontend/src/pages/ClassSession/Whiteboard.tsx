@@ -1,4 +1,5 @@
-import React, { useRef, useEffect, useState } from "react";
+import React, { useRef, useEffect, useState, useContext } from "react";
+import { SocketContext } from "./index";
 import { useAppSelector } from "../../store/hooks";
 
 type Tool = "pen" | "eraser" | "text" | "rect";
@@ -25,6 +26,9 @@ const Whiteboard: React.FC = () => {
   // get current user from redux to determine permissions
   const user = useAppSelector((s) => s.user.user as any);
   const isTeacher = user?.role === "TEACHER";
+
+  // get socket from context
+  const socket = useContext(SocketContext as any) as any;
 
   // multi-whiteboard support (in-memory)
   const [boards, setBoards] = useState<number[]>([0]);
@@ -98,6 +102,26 @@ const Whiteboard: React.FC = () => {
       drawing.current = true;
       ctx.beginPath();
       ctx.moveTo(pos.x, pos.y);
+      // send start-draw event (normalized coordinates)
+      try {
+        const canvas = canvasRef.current!;
+        const nx = pos.x / canvas.clientWidth;
+        const ny = pos.y / canvas.clientHeight;
+        console.debug("emit whiteboard:begin", {
+          x: nx,
+          y: ny,
+          tool,
+          color,
+          lineWidth,
+        });
+        socket?.emit("whiteboard:begin", {
+          x: nx,
+          y: ny,
+          tool,
+          color,
+          lineWidth,
+        });
+      } catch (err) {}
     } else if (tool === "rect") {
       // start rectangle drawing
       rectDrawing.current = true;
@@ -128,6 +152,25 @@ const Whiteboard: React.FC = () => {
     if (drawing.current) {
       ctx.lineTo(pos.x, pos.y);
       ctx.stroke();
+      try {
+        const canvas = canvasRef.current!;
+        const nx = pos.x / canvas.clientWidth;
+        const ny = pos.y / canvas.clientHeight;
+        console.debug("emit whiteboard:draw", {
+          x: nx,
+          y: ny,
+          tool,
+          color,
+          lineWidth,
+        });
+        socket?.emit("whiteboard:draw", {
+          x: nx,
+          y: ny,
+          tool,
+          color,
+          lineWidth,
+        });
+      } catch (err) {}
     } else if (rectDrawing.current && startPos.current) {
       // preview rectangle by restoring saved image and drawing rect on top
       if (savedImageRef.current) {
@@ -155,6 +198,10 @@ const Whiteboard: React.FC = () => {
     if (drawing.current) {
       drawing.current = false;
       ctx.closePath();
+      try {
+        console.debug("emit whiteboard:end");
+        socket?.emit("whiteboard:end", {});
+      } catch (err) {}
     }
     if (rectDrawing.current) {
       // finalize rectangle onto canvas
@@ -175,6 +222,51 @@ const Whiteboard: React.FC = () => {
       savedImageRef.current = null;
     }
   };
+
+  // subscribe to socket events to render remote drawings
+  useEffect(() => {
+    if (!socket) return;
+
+    const onBegin = (payload: any) => {
+      console.debug("recv whiteboard:begin", payload);
+      const ctx = ctxRef.current!;
+      const canvas = canvasRef.current!;
+      const x = payload.x * canvas.clientWidth;
+      const y = payload.y * canvas.clientHeight;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+    };
+    const onDraw = (payload: any) => {
+      console.debug("recv whiteboard:draw", payload);
+      const ctx = ctxRef.current!;
+      const canvas = canvasRef.current!;
+      const x = payload.x * canvas.clientWidth;
+      const y = payload.y * canvas.clientHeight;
+      ctx.lineTo(x, y);
+      ctx.strokeStyle = payload.color || ctx.strokeStyle;
+      ctx.lineWidth = payload.lineWidth || ctx.lineWidth;
+      ctx.stroke();
+    };
+    const onEnd = () => {
+      console.debug("recv whiteboard:end");
+      const ctx = ctxRef.current!;
+      try {
+        ctx.closePath();
+      } catch (e) {}
+    };
+
+    socket.on("whiteboard:begin", onBegin);
+    socket.on("whiteboard:draw", onDraw);
+    socket.on("whiteboard:end", onEnd);
+
+    return () => {
+      try {
+        socket.off("whiteboard:begin", onBegin);
+        socket.off("whiteboard:draw", onDraw);
+        socket.off("whiteboard:end", onEnd);
+      } catch (e) {}
+    };
+  }, [socket]);
 
   const clear = () => {
     const canvas = canvasRef.current!;
