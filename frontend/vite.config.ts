@@ -19,5 +19,14 @@ export default defineConfig({
       "@tools": path.resolve(__dirname, "./src/tools"),
     },
   },
-  server: {},
+  server: {
+    proxy: {
+      // forward all /api requests to the backend during development
+      "/api": {
+        target: "http://localhost:8070",
+        changeOrigin: true,
+        secure: false,
+      },
+    },
+  },
 });

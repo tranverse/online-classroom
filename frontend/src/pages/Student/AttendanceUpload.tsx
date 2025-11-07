@@ -3,7 +3,14 @@ import StudentService from "../../services/student.service";
 import { useToast } from "../../components/Toast";
 import { Camera, Upload } from "lucide-react";
 // face-api.js is loaded dynamically from CDN to avoid requiring npm install
-const MODEL_PATH = "/models"; // put face-api models under public/models
+// We'll try multiple model base URLs (local first, then known CDNs) so the app
+// can fetch weights from the network if local hosting isn't available.
+const MODEL_CANDIDATES = [
+  "/models",
+  "https://cdn.jsdelivr.net/gh/justadudewhohacks/face-api.js@master/weights",
+  "https://unpkg.com/face-api.js@0.22.2/weights",
+  "https://raw.githubusercontent.com/justadudewhohacks/face-api.js/master/weights",
+];
 
 async function loadFaceApi(): Promise<any> {
   // If already loaded as global
@@ -18,10 +25,21 @@ async function loadFaceApi(): Promise<any> {
     const s = document.createElement("script");
     s.src = scriptUrl;
     s.async = true;
-    s.onload = () => resolve();
+    s.onload = () => {
+      // give library a short tick to attach to window
+      setTimeout(() => resolve(), 50);
+    };
     s.onerror = () => reject(new Error("Failed to load face-api.js from CDN"));
     document.head.appendChild(s);
   });
+
+  // Wait up to ~6s for the global to appear
+  const start = Date.now();
+  while (!(window as any).faceapi && Date.now() - start < 6000) {
+    // small delay
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise((r) => setTimeout(r, 100));
+  }
 
   if (!(window as any).faceapi)
     throw new Error("faceapi not available after loading script");
@@ -32,25 +50,106 @@ const AttendanceUpload: React.FC = () => {
   const [photoPreview, setPhotoPreview] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [modelsLoaded, setModelsLoaded] = useState(false);
+  const [modelsError, setModelsError] = useState<string | null>(null);
   const [verifying, setVerifying] = useState(false);
+  const [lastVerifyDebug, setLastVerifyDebug] = useState<any | null>(null);
+  const [faceDetected, setFaceDetected] = useState(false);
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const toast = useToast();
+  // NOTE: do not automatically attach classSessionId to uploads here.
+  // This upload UI is intended for uploading sample images / data only.
+  // If you need to persist attendance for a specific session, call
+  // StudentService.uploadAttendancePhoto(file, classSessionId) from the
+  // session-specific UI instead.
+
+  // quick check whether a model base actually serves JSON manifests (not an HTML 404)
+  const checkModelBase = async (base: string) => {
+    const manifest = "face_recognition_model-weights_manifest.json";
+    const url = `${base.replace(/\/$/, "")}/${manifest}`;
+    try {
+      const r = await fetch(url, { method: "GET" });
+      if (!r.ok) return { ok: false, reason: `status=${r.status}` };
+      const text = await r.text();
+      if (text.trim().startsWith("<"))
+        return { ok: false, reason: "html returned" };
+      try {
+        JSON.parse(text);
+        return { ok: true };
+      } catch (e) {
+        return { ok: false, reason: "invalid json" };
+      }
+    } catch (e) {
+      return { ok: false, reason: String(e) };
+    }
+  };
+
+  // validate that a File contains a detectable face (uses client models)
+  const validateImageHasFace = async (f: File) => {
+    if (!modelsLoaded) return { ok: false, reason: "models_not_loaded" };
+    try {
+      const img = new Image();
+      img.src = URL.createObjectURL(f);
+      await new Promise((r) => (img.onload = r));
+      // reuse calcDescriptorFromImageEl; it will throw if no face
+      await calcDescriptorFromImageEl(img);
+      return { ok: true };
+    } catch (err: any) {
+      return { ok: false, reason: String(err?.message || err) };
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
+        setModelsError(null);
         const faceapi = await loadFaceApi();
-        await Promise.all([
-          faceapi.nets.tinyFaceDetector.loadFromUri(MODEL_PATH),
-          faceapi.nets.faceLandmark68Net.loadFromUri(MODEL_PATH),
-          faceapi.nets.faceRecognitionNet.loadFromUri(MODEL_PATH),
-        ]);
-        if (mounted) setModelsLoaded(true);
+        // try each candidate until one succeeds; pre-check manifest to avoid HTML/404
+        let loaded = false;
+        const tried: string[] = [];
+        for (const base of MODEL_CANDIDATES) {
+          const chk = await checkModelBase(base);
+          if (!chk.ok) {
+            tried.push(`${base} (${chk.reason})`);
+            continue;
+          }
+          try {
+            await Promise.all([
+              faceapi.nets.tinyFaceDetector.loadFromUri(base),
+              faceapi.nets.ssdMobilenetv1.loadFromUri(base),
+              faceapi.nets.faceLandmark68Net.loadFromUri(base),
+              faceapi.nets.faceRecognitionNet.loadFromUri(base),
+            ]);
+            loaded = true;
+            break;
+          } catch (e) {
+            console.warn("model load failed for", base, e);
+            tried.push(`${base} (load error)`);
+          }
+        }
+        if (!loaded) throw new Error(`models_load_failed: ${tried.join(", ")}`);
+        if (mounted) {
+          setModelsLoaded(true);
+          setModelsError(null);
+        }
       } catch (err) {
         console.error("Failed to load face-api models", err);
+        const msg =
+          err &&
+          (err as any).message &&
+          (err as any).message.includes("Unexpected token '<'")
+            ? "Không tải được model face-api: server trả về trang HTML. Nếu bạn host /models locally, tải weights hoặc cho phép CDN."
+            : "Failed to load face-api models. Ensure /models is available or allow CDN access.";
+        if (mounted) {
+          setModelsLoaded(false);
+          setModelsError(msg as string);
+        }
+        if (toast && toast.show) {
+          // show a shorter toast but keep detailed message in the UI
+          toast.show(msg, "error");
+        }
       }
     };
     load();
@@ -59,10 +158,61 @@ const AttendanceUpload: React.FC = () => {
     };
   }, []);
 
+  const retryLoadModels = async () => {
+    setModelsError(null);
+    setModelsLoaded(false);
+    try {
+      const faceapi = await loadFaceApi();
+      let loaded = false;
+      const tried: string[] = [];
+      for (const base of MODEL_CANDIDATES) {
+        const chk = await checkModelBase(base);
+        if (!chk.ok) {
+          tried.push(`${base} (${chk.reason})`);
+          continue;
+        }
+        try {
+          await Promise.all([
+            faceapi.nets.tinyFaceDetector.loadFromUri(base),
+            faceapi.nets.ssdMobilenetv1.loadFromUri(base),
+            faceapi.nets.faceLandmark68Net.loadFromUri(base),
+            faceapi.nets.faceRecognitionNet.loadFromUri(base),
+          ]);
+          loaded = true;
+          break;
+        } catch (e) {
+          console.warn("retry model load failed for", base, e);
+          tried.push(`${base} (load error)`);
+        }
+      }
+      if (!loaded) throw new Error(`models_load_failed: ${tried.join(", ")}`);
+      setModelsLoaded(true);
+      setModelsError(null);
+      toast?.show ? toast.show("Models loaded", "success") : null;
+    } catch (err) {
+      console.error("Retry load failed", err);
+      const msg =
+        err &&
+        (err as any).message &&
+        (err as any).message.includes("Unexpected token '<'")
+          ? "Không tải được model face-api: server trả về trang HTML. Nếu bạn host /models locally, tải weights hoặc cho phép CDN."
+          : "Failed to load face-api models. Ensure /models is available or allow CDN access.";
+      setModelsError(msg);
+      toast?.show ? toast.show(msg, "error") : null;
+    }
+  };
+
   // start camera on demand
   const startCamera = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+          facingMode: "user",
+        },
+        audio: false,
+      });
       if (videoRef.current) videoRef.current.srcObject = stream;
       setCameraOn(true);
     } catch (err) {
@@ -84,6 +234,49 @@ const AttendanceUpload: React.FC = () => {
       stopCamera();
     };
   }, []);
+
+  // live detection: poll the video and set faceDetected flag so Verify is only enabled when a face is visible
+  useEffect(() => {
+    let mounted = true;
+    let timer: any = null;
+    const runDetection = async () => {
+      if (!mounted) return;
+      // Don't attempt detection until models are loaded
+      if (!modelsLoaded) {
+        setFaceDetected(false);
+        // poll again later to see if models become ready
+        timer = setTimeout(runDetection, 700);
+        return;
+      }
+      if (!cameraOn || !videoRef.current) {
+        setFaceDetected(false);
+        timer = setTimeout(runDetection, 700);
+        return;
+      }
+      try {
+        const faceapi = await loadFaceApi();
+        if (!faceapi || !faceapi.nets) return;
+        const tinyOptions = new faceapi.TinyFaceDetectorOptions({
+          inputSize: 256,
+          scoreThreshold: 0.3,
+        });
+        const det = await faceapi.detectSingleFace(
+          videoRef.current as any,
+          tinyOptions
+        );
+        if (mounted) setFaceDetected(!!det);
+      } catch (e) {
+        // ignore
+      } finally {
+        timer = setTimeout(runDetection, 700);
+      }
+    };
+    runDetection();
+    return () => {
+      mounted = false;
+      if (timer) clearTimeout(timer);
+    };
+  }, [cameraOn]);
 
   const captureFromVideo = async () => {
     const video = videoRef.current;
@@ -107,14 +300,63 @@ const AttendanceUpload: React.FC = () => {
   const calcDescriptorFromImageEl = async (
     imgEl: HTMLImageElement | HTMLVideoElement
   ) => {
-    // detectSingleFace and compute descriptor
     const faceapi = await loadFaceApi();
-    const detection = await faceapi
-      .detectSingleFace(imgEl, new faceapi.TinyFaceDetectorOptions())
+
+    // Check models availability
+    const tinyLoaded = faceapi.nets?.tinyFaceDetector?.params != null;
+    const ssdLoaded = faceapi.nets?.ssdMobilenetv1?.params != null;
+    const landmarkLoaded = faceapi.nets?.faceLandmark68Net?.params != null;
+    const recNetLoaded = faceapi.nets?.faceRecognitionNet?.params != null;
+
+    if (!tinyLoaded || !landmarkLoaded || !recNetLoaded) {
+      throw new Error(
+        "Face models not fully loaded yet. Please wait a moment."
+      );
+    }
+
+    // Try TinyFaceDetector first
+    const tinyOptions = new faceapi.TinyFaceDetectorOptions({
+      inputSize: 416,
+      scoreThreshold: 0.4,
+    });
+
+    let detection = await faceapi
+      .detectSingleFace(imgEl, tinyOptions)
       .withFaceLandmarks()
       .withFaceDescriptor();
-    if (!detection) throw new Error("No face detected");
-    return detection.descriptor; // Float32Array
+
+    // try a looser tiny detector
+    if (!detection) {
+      const tinyLoose = new faceapi.TinyFaceDetectorOptions({
+        inputSize: 256,
+        scoreThreshold: 0.25,
+      });
+      detection = await faceapi
+        .detectSingleFace(imgEl, tinyLoose)
+        .withFaceLandmarks()
+        .withFaceDescriptor();
+    }
+
+    // fallback to SSD if available
+    if (!detection && ssdLoaded) {
+      try {
+        detection = await faceapi
+          .detectSingleFace(imgEl, new faceapi.SsdMobilenetv1Options())
+          .withFaceLandmarks()
+          .withFaceDescriptor();
+      } catch (err: unknown) {
+        console.warn("SSD fallback failed:", (err as any)?.message ?? err);
+      }
+    }
+
+    if (!detection) {
+      const msg =
+        "Không tìm thấy khuôn mặt. Vui lòng chụp rõ mặt, xoay đầu/dịch chuyển camera hoặc thử ảnh khác.";
+      toast?.show ? toast.show(msg, "error") : alert(msg);
+      throw new Error("No face detected");
+    }
+
+    return detection.descriptor;
   };
 
   const descriptorToArray = (d: Float32Array) =>
@@ -132,32 +374,89 @@ const AttendanceUpload: React.FC = () => {
 
     try {
       setVerifying(true);
+      // We'll still run local detection to provide immediate guidance and
+      // to populate debug info, but the actual verification will send the
+      // image to the server so the server uses the same extractor as enroll.
       let descriptor: Float32Array | null = null;
+      let imgEl: HTMLImageElement | null = null;
 
       if (photoPreview) {
         // use uploaded preview image
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.src = photoPreview;
         await new Promise((r) => (img.onload = r));
-        descriptor = await calcDescriptorFromImageEl(img);
+        imgEl = img;
+        // attempt local descriptor (for debug), but we won't rely on it for matching
+        try {
+          descriptor = await calcDescriptorFromImageEl(img);
+        } catch (e) {
+          // leave descriptor null, continue to send image to server
+        }
       } else if (videoRef.current) {
         // capture frame from video
         const blobUrl = await captureFromVideo();
         const img = new Image();
+        img.crossOrigin = "anonymous";
         img.src = blobUrl;
         await new Promise((r) => (img.onload = r));
-        descriptor = await calcDescriptorFromImageEl(img);
+        imgEl = img;
+        try {
+          descriptor = await calcDescriptorFromImageEl(img);
+        } catch (e) {
+          // ignore local detection failure
+        }
       } else {
         return toast.show("No image or camera available", "error");
       }
 
-      if (!descriptor) throw new Error("Failed to compute descriptor");
+      // build debug info
+      const debugInfo: any = {};
+      if (descriptor) {
+        const arr = descriptorToArray(descriptor);
+        debugInfo.descriptor_len = arr.length;
+      } else {
+        debugInfo.descriptor_len = 0;
+      }
 
-      // send descriptor array to backend via StudentService.verifyAttendance
-      const arr = descriptorToArray(descriptor);
-      const res = await StudentService.verifyAttendance(
-        arr /* classSessionId? studentId? */
+      // create base64 from image element by drawing to canvas so we send
+      // a consistent JPEG payload to the server for extraction
+      if (!imgEl) throw new Error("Failed to obtain image element");
+      const canvas = document.createElement("canvas");
+      const w = imgEl.naturalWidth || imgEl.width || 640;
+      const h = imgEl.naturalHeight || imgEl.height || 480;
+      // downscale if extremely large
+      const maxDim = 1200;
+      let targetW = w;
+      let targetH = h;
+      if (Math.max(w, h) > maxDim) {
+        if (w >= h) {
+          targetW = maxDim;
+          targetH = Math.round((h / w) * maxDim);
+        } else {
+          targetH = maxDim;
+          targetW = Math.round((w / h) * maxDim);
+        }
+      }
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas not available");
+      ctx.drawImage(imgEl, 0, 0, targetW, targetH);
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      const base64 = dataUrl.split(",")[1];
+
+      // attach debug info about descriptor (if any)
+      setLastVerifyDebug(debugInfo);
+
+      // send image base64 to backend verify endpoint which will extract
+      // descriptors server-side (same extractor used during enroll)
+      const res = await StudentService.verifyAttendanceImage(
+        base64 /*, classSessionId?, studentId? */
       );
+      // attach server response
+      setLastVerifyDebug((prev: any) => ({ ...prev, server: res }));
+
       if (res?.matched) {
         toast?.show
           ? toast.show("Attendance verified", "success")
@@ -165,16 +464,43 @@ const AttendanceUpload: React.FC = () => {
         // optional: clear preview
         setPhotoPreview(null);
       } else {
-        toast?.show
-          ? toast.show(
-              `Not matched (distance=${res?.distance ?? "?"})`,
-              "error"
-            )
-          : console.warn(`Not matched (distance=${res?.distance ?? "?"})`);
+        // Prefer server-provided human-readable Vietnamese message
+        const human = res?.humanMessageVi;
+        if (human) {
+          toast?.show ? toast.show(human, "error") : console.warn(human);
+        } else {
+          const distanceText = res?.distance ?? "?";
+          const msg = `Not matched (distance=${distanceText})`;
+          toast?.show ? toast.show(msg, "error") : console.warn(msg);
+        }
+        // also show raw server response in debug toast (compact)
+        try {
+          const rawShort = JSON.stringify(res, null, 2);
+          toast?.show ? toast.show(rawShort, "error") : console.log(rawShort);
+        } catch (e) {
+          // ignore
+        }
       }
     } catch (err: any) {
       console.error(err);
-      toast.show(err?.message || "Verification failed", "error");
+      const msg = err?.message || "Verification failed";
+      // if face not detected locally, provide clearer guidance and debug info
+      if (
+        String(msg).toLowerCase().includes("no face detected") ||
+        String(msg).toLowerCase().includes("failed to compute descriptor")
+      ) {
+        setLastVerifyDebug({
+          descriptor_len: 0,
+          usedAI: false,
+          minDistance: "-",
+        });
+        toast.show(
+          "Không phát hiện khuôn mặt trên ảnh. Vui lòng bật camera, đảm bảo ánh sáng tốt, không che mặt và giữ khuôn mặt ở giữa khung hình. Thử lại.",
+          "error"
+        );
+      } else {
+        toast.show(msg, "error");
+      }
     } finally {
       setVerifying(false);
     }
@@ -183,7 +509,21 @@ const AttendanceUpload: React.FC = () => {
   const onSubmitPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
     const input = document.getElementById("photo") as HTMLInputElement | null;
-    const file = input?.files?.[0];
+    let file = input?.files?.[0] ?? null;
+    // fallback: if user captured a preview (camera snapshot) but didn't re-select a file
+    if (!file && photoPreview) {
+      try {
+        const res = await fetch(photoPreview);
+        const blob = await res.blob();
+        // create a File so backend sees a filename/content-type
+        file = new File([blob], "capture.jpg", {
+          type: blob.type || "image/jpeg",
+        });
+      } catch (err) {
+        console.error("Failed to fetch preview blob", err);
+      }
+    }
+
     if (!file) {
       toast?.show
         ? toast.show("Pick a photo first", "error")
@@ -191,22 +531,128 @@ const AttendanceUpload: React.FC = () => {
       return;
     }
 
+    if (modelsLoaded) {
+      const check = await validateImageHasFace(file);
+      if (!check.ok) {
+        // do not auto-upload if no face found
+        if (check.reason === "models_not_loaded") {
+          toast?.show
+            ? toast.show(
+                "Models chưa sẵn sàng để kiểm tra ảnh. Bấm Retry models hoặc sử dụng Upload (fallback).",
+                "error"
+              )
+            : null;
+        } else {
+          toast?.show
+            ? toast.show(
+                "Ảnh không chứa khuôn mặt hợp lệ. Vui lòng chọn/chụp lại ảnh rõ mặt.",
+                "error"
+              )
+            : null;
+        }
+        return;
+      }
+    } else {
+      // If models aren't loaded, inform user they can still upload as fallback
+      toast?.show
+        ? toast.show(
+            "Models chưa tải xong - upload sẽ dùng server để phân tích (fallback).",
+            "info"
+          )
+        : null;
+    }
     try {
       setUploading(true);
-      await StudentService.uploadAttendancePhoto(file);
-      toast?.show
-        ? toast.show("Attendance recorded (server fallback)", "success")
-        : console.info("Attendance recorded (server fallback)");
+      // compress/resize if large
+      const toUpload = await (async () => {
+        try {
+          return await resizeImage(file, 1024, 0.8);
+        } catch (e) {
+          return file;
+        }
+      })();
+      // if user opted to save as attendance, include the provided session id
+      const shouldSaveAttendance = (
+        document.getElementById("saveAttendance") as HTMLInputElement | null
+      )?.checked;
+      const sessionIdInput = (
+        document.getElementById("sessionId") as HTMLInputElement | null
+      )?.value;
+      const resp = await StudentService.uploadAttendancePhoto(
+        toUpload,
+        shouldSaveAttendance && sessionIdInput ? sessionIdInput : undefined
+      );
+      const serverMsg =
+        resp?.data?.humanMessageVi ||
+        resp?.message ||
+        resp?.data?.message ||
+        "Attendance recorded (server fallback)";
+      toast?.show ? toast.show(serverMsg, "success") : console.info(serverMsg);
+      // record server response in debug box
+      setLastVerifyDebug((p: any) => ({
+        ...(p || {}),
+        upload: {
+          success: true,
+          server: resp,
+          analyzeMetrics:
+            resp?.data?.analyzeMetrics ?? resp?.data?.attendance?.note ?? null,
+        },
+      }));
       setPhotoPreview(null);
       if (input) input.value = "";
     } catch (err: any) {
       console.error("Upload failed", err);
+      const msg =
+        err?.message || err?.response?.data?.message || "Upload failed";
       toast?.show
-        ? toast.show("Upload failed", "error")
-        : console.warn("Upload failed");
+        ? toast.show(`Upload failed: ${msg}`, "error")
+        : console.warn("Upload failed", msg);
+      setLastVerifyDebug((p: any) => ({
+        ...(p || {}),
+        upload: { success: false, error: msg },
+      }));
     } finally {
       setUploading(false);
     }
+  };
+
+  // resize/compress image File via canvas, returns a new File
+  const resizeImage = async (file: File, maxDim = 1024, quality = 0.8) => {
+    return new Promise<File>(async (resolve, reject) => {
+      try {
+        const img = new Image();
+        img.src = URL.createObjectURL(file);
+        await new Promise((r) => (img.onload = r));
+        const { width, height } = img;
+        let targetW = width;
+        let targetH = height;
+        if (Math.max(width, height) > maxDim) {
+          if (width > height) {
+            targetW = maxDim;
+            targetH = Math.round((height / width) * maxDim);
+          } else {
+            targetH = maxDim;
+            targetW = Math.round((width / height) * maxDim);
+          }
+        }
+        const c = document.createElement("canvas");
+        c.width = targetW;
+        c.height = targetH;
+        const ctx = c.getContext("2d")!;
+        ctx.drawImage(img, 0, 0, targetW, targetH);
+        c.toBlob(
+          (b) => {
+            if (!b) return reject(new Error("Failed to compress"));
+            const newFile = new File([b], file.name, { type: "image/jpeg" });
+            resolve(newFile);
+          },
+          "image/jpeg",
+          quality
+        );
+      } catch (err) {
+        reject(err);
+      }
+    });
   };
 
   return (
@@ -248,15 +694,50 @@ const AttendanceUpload: React.FC = () => {
                   </div>
                 </div>
 
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-56 object-cover rounded-xl border border-gray-200 ${
-                    !cameraOn ? "opacity-50" : ""
-                  }`}
-                />
+                <div className="relative w-full h-80">
+                  <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    className={`w-full h-full object-cover rounded-xl border border-gray-200 ${
+                      !cameraOn ? "opacity-50" : ""
+                    }`}
+                  />
+
+                  {/* Overlay mờ xung quanh, nhưng chừa giữa tròn */}
+                  <div className="absolute inset-0 flex items-center justify-center">
+                    <svg width="100%" height="100%">
+                      <defs>
+                        <mask id="mask">
+                          <rect width="100%" height="100%" fill="white" />
+                          <circle cx="50%" cy="50%" r="120" fill="black" />
+                        </mask>
+                      </defs>
+                      <rect
+                        width="100%"
+                        height="100%"
+                        fill="rgba(0,0,0,0.5)"
+                        mask="url(#mask)"
+                      />
+                    </svg>
+                  </div>
+
+                  {/* Viền tròn hướng dẫn */}
+                  <div
+                    className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-60 h-60 rounded-full border-4 ${
+                      faceDetected
+                        ? "border-green-500 shadow-[0_0_30px_rgba(34,197,94,0.8)]"
+                        : "border-gray-300"
+                    }`}
+                  ></div>
+
+                  {/* Hướng dẫn */}
+                  <div className="absolute bottom-2 w-full text-center text-white text-sm font-medium drop-shadow-md">
+                    Giữ khuôn mặt trong khung tròn
+                  </div>
+                </div>
+
                 <canvas ref={canvasRef} className="hidden" />
                 <div className="flex gap-2">
                   <button
@@ -275,9 +756,11 @@ const AttendanceUpload: React.FC = () => {
                   </button>
                   <button
                     onClick={onVerify}
-                    disabled={!modelsLoaded || verifying || !cameraOn}
+                    disabled={
+                      !modelsLoaded || verifying || !cameraOn || !faceDetected
+                    }
                     className={`px-3 py-2 rounded text-white ${
-                      !modelsLoaded || verifying || !cameraOn
+                      !modelsLoaded || verifying || !cameraOn || !faceDetected
                         ? "bg-gray-400 cursor-not-allowed"
                         : "bg-green-600 hover:bg-green-700"
                     }`}
@@ -302,7 +785,7 @@ const AttendanceUpload: React.FC = () => {
                   <img
                     src={photoPreview}
                     alt="Preview"
-                    className="w-full h-56 object-cover rounded-xl shadow-md border border-gray-200"
+                    className="w-full h-80 object-cover rounded-xl shadow-md border border-gray-200"
                   />
                 )}
                 <div className="flex gap-2">
@@ -317,9 +800,136 @@ const AttendanceUpload: React.FC = () => {
                   >
                     {verifying ? "Verifying..." : "Verify uploaded image"}
                   </button>
-                  <form onSubmit={onSubmitPhoto} className="inline">
+                  <button
+                    onClick={async () => {
+                      // enroll captured preview or selected file
+                      let file =
+                        (
+                          document.getElementById(
+                            "photo"
+                          ) as HTMLInputElement | null
+                        )?.files?.[0] ?? null;
+                      if (!file && photoPreview) {
+                        try {
+                          const res = await fetch(photoPreview);
+                          const blob = await res.blob();
+                          file = new File([blob], "capture.jpg", {
+                            type: blob.type || "image/jpeg",
+                          });
+                        } catch (e) {
+                          console.error(
+                            "Failed to fetch preview blob for enroll",
+                            e
+                          );
+                        }
+                      }
+                      if (!file)
+                        return toast?.show
+                          ? toast.show("Không có ảnh để enroll", "error")
+                          : null;
+                      let sendFile = file;
+                      try {
+                        sendFile = await resizeImage(file, 1024, 0.8);
+                      } catch (e) {
+                        // ignore and use original
+                      }
+                      const r = await StudentService.enrollSelf(sendFile);
+                      if (r) {
+                        toast?.show
+                          ? toast.show("Enroll thành công", "success")
+                          : null;
+                        // update debug info
+                        setLastVerifyDebug((p: any) => ({
+                          ...(p || {}),
+                          enroll: r,
+                        }));
+                      } else {
+                        toast?.show
+                          ? toast.show("Enroll thất bại", "error")
+                          : null;
+                      }
+                    }}
+                    className="px-3 py-2 rounded text-white bg-blue-500 hover:bg-blue-600"
+                  >
+                    Enroll face
+                  </button>
+                  <div className="inline">
+                    <div className="text-sm text-gray-600 mb-2">
+                      Ghi chú: Nút dưới đây sẽ lưu ảnh này như "dữ liệu khuôn
+                      mặt" (enroll) để dùng cho chức năng điểm danh sau này.
+                    </div>
                     <button
-                      type="submit"
+                      onClick={async () => {
+                        let file =
+                          (
+                            document.getElementById(
+                              "photo"
+                            ) as HTMLInputElement | null
+                          )?.files?.[0] ?? null;
+                        if (!file && photoPreview) {
+                          try {
+                            const res = await fetch(photoPreview);
+                            const blob = await res.blob();
+                            file = new File([blob], "capture.jpg", {
+                              type: blob.type || "image/jpeg",
+                            });
+                          } catch (e) {
+                            console.error(
+                              "Failed to fetch preview blob for enroll",
+                              e
+                            );
+                          }
+                        }
+                        if (!file)
+                          return toast?.show
+                            ? toast.show("Không có ảnh để lưu", "error")
+                            : null;
+                        let sendFile = file;
+                        try {
+                          sendFile = await resizeImage(file, 1024, 0.8);
+                        } catch (e) {
+                          // ignore and use original
+                        }
+                        setUploading(true);
+                        try {
+                          const r = await StudentService.enrollSelf(sendFile);
+                          if (r) {
+                            toast?.show
+                              ? toast.show(
+                                  "Ảnh đã được lưu làm dữ liệu khuôn mặt (enrolled)",
+                                  "success"
+                                )
+                              : null;
+                            setLastVerifyDebug((p: any) => ({
+                              ...(p || {}),
+                              enroll: r,
+                            }));
+                            // clear preview/file input
+                            setPhotoPreview(null);
+                            const inputEl = document.getElementById(
+                              "photo"
+                            ) as HTMLInputElement | null;
+                            if (inputEl) inputEl.value = "";
+                          } else {
+                            toast?.show
+                              ? toast.show(
+                                  "Lưu dữ liệu khuôn mặt thất bại",
+                                  "error"
+                                )
+                              : null;
+                          }
+                        } catch (err) {
+                          console.error(err);
+                          toast?.show
+                            ? toast.show(
+                                "Lỗi khi lưu dữ liệu khuôn mặt",
+                                "error"
+                              )
+                            : null;
+                        } finally {
+                          setUploading(false);
+                        }
+                      }}
                       disabled={uploading}
                       className={`px-3 py-2 rounded text-white ${
                         uploading
@@ -327,9 +937,9 @@ const AttendanceUpload: React.FC = () => {
                           : "bg-blue-600 hover:bg-blue-700"
                       }`}
                     >
-                      {uploading ? "Uploading..." : "Upload (fallback)"}
+                      {uploading ? "Saving..." : "Save face data (Enroll)"}
                     </button>
-                  </form>
+                  </div>
                 </div>
               </div>
             </div>
@@ -337,6 +947,30 @@ const AttendanceUpload: React.FC = () => {
             {!modelsLoaded && (
               <div className="text-sm text-yellow-600">
                 Loading face models...
+              </div>
+            )}
+            {lastVerifyDebug && (
+              <div className="mt-4 p-3 bg-gray-50 border rounded text-sm text-gray-700">
+                <div className="font-medium">Debug info</div>
+                <div>Descriptor length: {lastVerifyDebug.descriptor_len}</div>
+                <div>
+                  Server response:
+                  <pre className="whitespace-pre-wrap text-xs mt-2">
+                    {JSON.stringify(lastVerifyDebug.server, null, 2)}
+                  </pre>
+                </div>
+                {lastVerifyDebug.upload?.analyzeMetrics && (
+                  <div className="mt-2">
+                    Liveness / Analyze metrics:
+                    <pre className="whitespace-pre-wrap text-xs mt-1">
+                      {JSON.stringify(
+                        lastVerifyDebug.upload.analyzeMetrics,
+                        null,
+                        2
+                      )}
+                    </pre>
+                  </div>
+                )}
               </div>
             )}
           </div>

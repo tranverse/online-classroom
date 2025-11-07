@@ -36,6 +36,7 @@ public class Attendance {
     String note;
 
     @Enumerated(EnumType.STRING)
+    @jakarta.persistence.Column(length = 32)
     AttendanceStatus status;
 
     @ManyToOne

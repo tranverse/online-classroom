@@ -1,24 +1,19 @@
 package com.backend.config;
 
-import com.backend.Util.PasswordUtil;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.ApplicationArguments;
+import org.springframework.boot.ApplicationRunner;
+import org.springframework.stereotype.Component;
+
 import com.backend.enums.Role;
 import com.backend.model.User;
 import com.backend.repository.UserRepository;
-import com.backend.security.jwt.JwtUtil;
-import com.infisical.sdk.InfisicalSdk;
-import com.infisical.sdk.config.SdkConfig;
-import com.infisical.sdk.util.InfisicalException;
+import com.backend.util.PasswordUtil;
+
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.ApplicationArguments;
-import org.springframework.boot.ApplicationRunner;
-import org.springframework.context.annotation.Bean;
-import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.stereotype.Component;
 
 @Component
 @RequiredArgsConstructor

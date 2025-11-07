@@ -1,1 +1,6 @@
-flask==2.3.4
+flask
+deepface==0.0.91
+numpy
+opencv-python-headless
+tensorflow==2.12.0
+pillow

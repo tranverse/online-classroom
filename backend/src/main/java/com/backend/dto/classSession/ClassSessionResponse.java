@@ -2,9 +2,9 @@ package com.backend.dto.classSession;
 
 import java.time.LocalDateTime;
 
+import com.backend.dto.classroom.ClassroomLiteResponse;
 import com.backend.enums.ClassSessionStatus;
 import com.backend.enums.ClassSessionType;
-import com.backend.model.Classroom;
 
 import lombok.Getter;
 import lombok.Setter;
@@ -23,7 +23,7 @@ public class ClassSessionResponse {
 
     String note;
 
-    Classroom classroom;
+    ClassroomLiteResponse classroom;
 
     ClassSessionType sessionType;
 

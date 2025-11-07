@@ -6,12 +6,17 @@ import java.util.ArrayList;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
-import java.util.stream.Collectors;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.ResponseEntity;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import com.backend.anti.FakeDetector;
 import com.backend.model.FaceEmbedding;
@@ -23,6 +28,7 @@ import com.backend.util.FaceUtils;
 public class FaceRecognitionService {
     private final FaceEmbeddingRepository faceEmbeddingRepository;
     private final FakeDetector fakeDetector;
+    private static final Logger log = LoggerFactory.getLogger(FaceRecognitionService.class);
 
     @Value("${app.face.similarity.threshold:0.6}")
     private double similarityThreshold;
@@ -34,6 +40,11 @@ public class FaceRecognitionService {
     public FaceRecognitionService(FaceEmbeddingRepository faceEmbeddingRepository, FakeDetector fakeDetector) {
         this.faceEmbeddingRepository = faceEmbeddingRepository;
         this.fakeDetector = fakeDetector;
+    }
+
+    // expose similarity threshold for other components
+    public double getSimilarityThreshold() {
+        return similarityThreshold;
     }
 
     public Map<String, Object> randomChallenge() {
@@ -115,26 +126,71 @@ public class FaceRecognitionService {
     public java.util.List<Double> extractDescriptor(String imageBase64OrJson) {
         if (imageBase64OrJson == null) return java.util.Collections.emptyList();
         String s = imageBase64OrJson.trim();
-        // if looks like base64, try decode
-        try {
-            // heuristics: contains only base64 chars and no brackets
-            if (!s.startsWith("[") && s.matches("^[A-Za-z0-9+/=\\r\\n]+$") ) {
-                byte[] decoded = Base64.getDecoder().decode(s);
-                s = new String(decoded, StandardCharsets.UTF_8).trim();
+
+        // If string looks like a JSON array already, parse it locally
+        if (s.startsWith("[")) {
+            try {
+                double[] arr = fromJson(s);
+                java.util.List<Double> out = new java.util.ArrayList<>(arr.length);
+                for (double v : arr) out.add(v);
+                return out;
+            } catch (Exception ex) {
+                // fallthrough to attempt AI service extraction
             }
-        } catch (Exception ex) {
-            // fallback to original string
         }
 
-        // now expect s to be a JSON array like [0.1,0.2,...]
-        try {
-            double[] arr = fromJson(s);
-            java.util.List<Double> out = new java.util.ArrayList<>(arr.length);
-            for (double v : arr) out.add(v);
-            return out;
-        } catch (Exception ex) {
-            return java.util.Collections.emptyList();
+        // Heuristic: if the input is long or contains typical base64 headers, treat as image
+        boolean looksLikeBase64Image = s.length() > 200 || s.contains("/9j/") || s.contains("data:image");
+        if (!looksLikeBase64Image) {
+            // maybe it is base64-encoded JSON array (legacy clients). Try decode once.
+            try {
+                if (s.matches("^[A-Za-z0-9+/=\\r\\n]+$")) {
+                    byte[] decoded = Base64.getDecoder().decode(s);
+                    String dec = new String(decoded, StandardCharsets.UTF_8).trim();
+                    if (dec.startsWith("[")) {
+                        double[] arr = fromJson(dec);
+                        java.util.List<Double> out = new java.util.ArrayList<>(arr.length);
+                        for (double v : arr) out.add(v);
+                        return out;
+                    }
+                }
+            } catch (Exception ex) {
+                // ignore and continue to AI extraction
+            }
         }
+
+        // Fallback: call external AI service /extract to obtain real embeddings
+        try {
+            String aiUrl = System.getenv().getOrDefault("AI_SERVICE_URL", "http://localhost:5001/extract");
+            RestTemplate rt = new RestTemplate();
+            HttpHeaders headers = new HttpHeaders();
+            headers.setContentType(MediaType.APPLICATION_JSON);
+            java.util.Map<String, String> payload = java.util.Map.of("imageBase64", s);
+            HttpEntity<java.util.Map<String, String>> req = new HttpEntity<>(payload, headers);
+            ResponseEntity<String> resp = rt.postForEntity(aiUrl, req, String.class);
+            if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                log.info("AI service response body: {}", resp.getBody());
+                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,Object>> tr = new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,Object>>(){};
+                java.util.Map<String,Object> m = mapper.readValue(resp.getBody(), tr);
+                Object descObj = m.get("descriptor");
+                if (descObj != null) {
+                    java.util.List<Double> descriptor = mapper.convertValue(descObj, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
+                    if (descriptor != null) {
+                        log.info("Parsed descriptor length from AI: {}", descriptor.size());
+                        if (descriptor.size() != 128) {
+                            log.warn("Descriptor length unexpected ({}). Expected 128. AI response may be malformed.", descriptor.size());
+                        }
+                    }
+                    return descriptor;
+                }
+            }
+        } catch (Exception ex) {
+            // ignore and return empty
+            log.warn("AI extract failed", ex);
+        }
+
+        return java.util.Collections.emptyList();
     }
 }
 

@@ -114,22 +114,31 @@ export const StudentService = {
     }
   },
 
-  uploadAttendancePhoto: async (file: File) => {
+  uploadAttendancePhoto: async (file: File, classSessionId?: string) => {
     try {
       const form = new FormData();
       form.append("photo", file);
       // Do not manually set Content-Type for FormData — the browser will add
       // the required multipart boundary. Manually setting it can break
       // multipart parsing on the server and cause 500 errors.
-      const { data } = await axios.post(`${BASE}/attendance/photo`, form);
+      const url = classSessionId
+        ? `${BASE}/attendance/photo?classSessionId=${encodeURIComponent(
+            classSessionId
+          )}`
+        : `${BASE}/attendance/photo`;
+      const { data } = await axios.post(url, form);
       return data?.data;
     } catch (err: any) {
+      // If server returned 413 (Payload Too Large), surface explicit error
+      if (err?.response?.status === 413) throw new Error("FILE_TOO_LARGE");
       // If server returned 401, surface it so caller can handle auth
       if (err?.response?.status === 401) throw new Error("Unauthorized");
-      // other errors: keep fallback behavior
-      return new Promise((res) =>
-        setTimeout(() => res({ success: true }), 800)
-      );
+      // other errors: surface server message if provided so UI can show it
+      const serverMsg =
+        err?.response?.data?.message ||
+        err?.response?.data?.error ||
+        err?.message;
+      throw new Error(serverMsg || "UPLOAD_FAILED");
     }
   },
   // face endpoints
@@ -195,6 +204,31 @@ export const StudentService = {
       return new Promise((res) =>
         setTimeout(() => res({ matched: true, distance: 0.4 }), 800)
       );
+    }
+  },
+  verifyAttendanceImage: async (
+    imageBase64: string,
+    classSessionId?: string,
+    studentId?: string
+  ) => {
+    try {
+      const payload: any = { imageBase64 };
+      if (classSessionId) payload.classSessionId = classSessionId;
+      if (studentId) payload.studentId = studentId;
+      const { data } = await axios.post(`${BASE}/attendance/verify`, payload);
+      return data?.data;
+    } catch (e) {
+      return null;
+    }
+  },
+  enrollSelf: async (file: File) => {
+    try {
+      const form = new FormData();
+      form.append("photo", file);
+      const { data } = await axios.post(`/api/student/face/enroll`, form);
+      return data?.data;
+    } catch (err: any) {
+      return null;
     }
   },
 };

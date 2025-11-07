@@ -5,7 +5,6 @@ import java.util.Date;
 
 import org.springframework.stereotype.Service;
 
-import com.backend.Util.PasswordUtil;
 import com.backend.dto.auth.AuthenticationResponse;
 import com.backend.dto.auth.IntrospectRequest;
 import com.backend.dto.auth.IntrospectResponse;
@@ -20,6 +19,7 @@ import com.backend.model.User;
 import com.backend.repository.InvalidatedTokenRepository;
 import com.backend.repository.UserRepository;
 import com.backend.security.jwt.JwtUtil;
+import com.backend.util.PasswordUtil;
 import com.nimbusds.jose.JOSEException;
 
 import lombok.AccessLevel;
