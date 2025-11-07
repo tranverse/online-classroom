@@ -29,6 +29,52 @@ const ClassSessionEntry: React.FC = () => {
 
   if (!id) return <div>Missing class session id</div>;
 
+  // If current user is a teacher (or instructor-like), skip attendance UI entirely.
+  const roleFromStorage = (localStorage.getItem("role") || "").toLowerCase();
+  const userRaw = localStorage.getItem("user");
+  const parseUser = (() => {
+    try {
+      return userRaw ? JSON.parse(userRaw) : null;
+    } catch (e) {
+      return null;
+    }
+  })();
+
+  const isTeacherRole = (r: any) => {
+    if (!r) return false;
+    const s = String(r).toLowerCase();
+    return (
+      s.includes("teacher") ||
+      s.includes("tutor") ||
+      s.includes("lecturer") ||
+      s.includes("instructor") ||
+      s.includes("giangvien")
+    );
+  };
+
+  let isTeacher = false;
+  if (isTeacherRole(roleFromStorage)) isTeacher = true;
+  // check common fields on the stored user object
+  if (!isTeacher && parseUser) {
+    if (
+      isTeacherRole(parseUser.role) ||
+      isTeacherRole(parseUser.userType) ||
+      isTeacherRole(parseUser.type)
+    )
+      isTeacher = true;
+    // roles may be an array
+    if (!isTeacher && Array.isArray(parseUser.roles)) {
+      isTeacher = parseUser.roles.some((rr: any) => isTeacherRole(rr));
+    }
+    if (!isTeacher && Array.isArray(parseUser.authorities)) {
+      isTeacher = parseUser.authorities.some((rr: any) => isTeacherRole(rr));
+    }
+  }
+
+  if (isTeacher) {
+    return <ClassSession />;
+  }
+
   if (!attended) {
     return (
       <div className="p-4">

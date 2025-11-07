@@ -1,5 +1,6 @@
 package com.backend.dto.user;
 
+import com.backend.enums.Role;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -11,4 +12,5 @@ public class UserResponse {
     private String email;
     private String avatar;
     private String id;
+    private Role role;
 }

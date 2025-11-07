@@ -88,14 +88,7 @@ const ClassSession = () => {
                   className="cursor-pointer"
                 />
               </div>
-              {/* Attendance capture (student) */}
-              <div className="ml-4">
-                <AttendanceCapture
-                  classSessionId={"demo-session"}
-                  userId={"demo-user"}
-                  apiUrl={""}
-                />
-              </div>
+
               <div className="flex border border-gray-300 items-center justify-center shadow p-1">
                 <div className="flex gap-2 items-center justify-center  p-1 ">
                   <RiArrowLeftSLine className="cursor-pointer text-xl" />

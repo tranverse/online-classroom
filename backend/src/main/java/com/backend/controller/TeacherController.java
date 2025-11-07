@@ -1,7 +1,9 @@
 package com.backend.controller;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -14,9 +16,16 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.backend.dto.ApiResponse;
 import com.backend.dto.AttendanceDTO;
 import com.backend.dto.AttendanceUpdateRequest;
 import com.backend.dto.ClassSessionRequest;
+import com.backend.dto.classroom.ClassroomResponse;
+import com.backend.dto.classSession.ClassSessionResponse;
+import com.backend.dto.user.UserResponse;
+import com.backend.mapper.ClassroomMapper;
+import com.backend.mapper.ClassSessionMapper;
+import com.backend.mapper.UserMapper;
 import com.backend.model.ClassSession;
 import com.backend.model.ClassStatistics;
 import com.backend.model.Classroom;
@@ -24,75 +33,137 @@ import com.backend.model.User;
 import com.backend.service.TeacherService;
 
 import jakarta.validation.Valid;
+import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
+import lombok.experimental.FieldDefaults;
 
 @RestController
 @RequestMapping("/api/teacher")
+@FieldDefaults(level = AccessLevel.PRIVATE, makeFinal = true)
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('TEACHER')")
 public class TeacherController {
 
-    private final TeacherService teacherService;
+    TeacherService teacherService;
+    ClassroomMapper classroomMapper;
+    ClassSessionMapper classSessionMapper;
+    UserMapper userMapper;
 
     @GetMapping("/classes")
-    public ResponseEntity<List<Classroom>> getTeacherClasses() {
-        return ResponseEntity.ok(teacherService.getTeacherClasses());
+    public ResponseEntity<ApiResponse<List<ClassroomResponse>>> getTeacherClasses() {
+        try {
+            List<Classroom> classes = teacherService.getTeacherClasses();
+            List<ClassroomResponse> resp = classes == null ? List.of() : classes.stream().map(classroomMapper::toClassroomResponse).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.<List<ClassroomResponse>>builder().message("Get teacher classes successfully").code("teacher-classes-get").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<ClassroomResponse>>builder().success(false).message("Failed to fetch teacher classes").build());
+        }
     }
 
     @GetMapping("/classes/{classId}/students")
-    public ResponseEntity<List<User>> getClassStudents(@PathVariable String classId) {
-        return ResponseEntity.ok(teacherService.getClassStudents(classId));
+    public ResponseEntity<ApiResponse<List<UserResponse>>> getClassStudents(@PathVariable String classId) {
+        try {
+            List<User> users = teacherService.getClassStudents(classId);
+            List<UserResponse> resp = users == null ? List.of() : users.stream().map(userMapper::toUserResponse).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.<List<UserResponse>>builder().message("Get class students successfully").code("teacher-class-students-get").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<UserResponse>>builder().success(false).message("Failed to fetch class students").build());
+        }
     }
 
     @GetMapping("/classes/{classId}/sessions")
-    public ResponseEntity<List<ClassSession>> getClassSessions(@PathVariable String classId) {
-        return ResponseEntity.ok(teacherService.getClassSessions(classId));
+    public ResponseEntity<ApiResponse<List<ClassSessionResponse>>> getClassSessions(@PathVariable String classId) {
+        try {
+            List<ClassSession> sessions = teacherService.getClassSessions(classId);
+            List<ClassSessionResponse> resp = sessions == null ? List.of() : sessions.stream().map(classSessionMapper::toClassSessionResponse).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.<List<ClassSessionResponse>>builder().message("Get class sessions successfully").code("teacher-class-sessions-get").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<ClassSessionResponse>>builder().success(false).message("Failed to fetch class sessions").build());
+        }
     }
 
     @GetMapping("/classes/{classId}/sessions/upcoming")
-    public ResponseEntity<List<ClassSession>> getUpcomingSessions(@PathVariable String classId) {
-        return ResponseEntity.ok(teacherService.getUpcomingSessions(classId));
+    public ResponseEntity<ApiResponse<List<ClassSessionResponse>>> getUpcomingSessions(@PathVariable String classId) {
+        try {
+            List<ClassSession> sessions = teacherService.getUpcomingSessions(classId);
+            List<ClassSessionResponse> resp = sessions == null ? List.of() : sessions.stream().map(classSessionMapper::toClassSessionResponse).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.<List<ClassSessionResponse>>builder().message("Get upcoming sessions successfully").code("teacher-class-sessions-upcoming").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<ClassSessionResponse>>builder().success(false).message("Failed to fetch upcoming sessions").build());
+        }
     }
 
     @GetMapping("/classes/{classId}/sessions/past")
-    public ResponseEntity<List<ClassSession>> getPastSessions(@PathVariable String classId) {
-        return ResponseEntity.ok(teacherService.getPastSessions(classId));
+    public ResponseEntity<ApiResponse<List<ClassSessionResponse>>> getPastSessions(@PathVariable String classId) {
+        try {
+            List<ClassSession> sessions = teacherService.getPastSessions(classId);
+            List<ClassSessionResponse> resp = sessions == null ? List.of() : sessions.stream().map(classSessionMapper::toClassSessionResponse).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.<List<ClassSessionResponse>>builder().message("Get past sessions successfully").code("teacher-class-sessions-past").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<ClassSessionResponse>>builder().success(false).message("Failed to fetch past sessions").build());
+        }
     }
 
     @PostMapping("/classes/{classId}/sessions")
-    public ResponseEntity<ClassSession> createClassSession(
-            @PathVariable String classId,
-            @Valid @RequestBody ClassSessionRequest request) {
-        return ResponseEntity.ok(teacherService.createClassSession(classId, request));
+    public ResponseEntity<ApiResponse<ClassSessionResponse>> createClassSession(@PathVariable String classId, @Valid @RequestBody ClassSessionRequest request) {
+        try {
+            ClassSession session = teacherService.createClassSession(classId, request);
+            ClassSessionResponse resp = classSessionMapper.toClassSessionResponse(session);
+            return ResponseEntity.ok(ApiResponse.<ClassSessionResponse>builder().message("Create session successfully").code("teacher-session-create").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<ClassSessionResponse>builder().success(false).message("Failed to create session").build());
+        }
     }
 
     @PutMapping("/sessions/{sessionId}")
-    public ResponseEntity<ClassSession> updateClassSession(
-            @PathVariable String sessionId,
-            @Valid @RequestBody ClassSessionRequest request) {
-        return ResponseEntity.ok(teacherService.updateClassSession(sessionId, request));
+    public ResponseEntity<ApiResponse<ClassSessionResponse>> updateClassSession(@PathVariable String sessionId, @Valid @RequestBody ClassSessionRequest request) {
+        try {
+            ClassSession session = teacherService.updateClassSession(sessionId, request);
+            ClassSessionResponse resp = classSessionMapper.toClassSessionResponse(session);
+            return ResponseEntity.ok(ApiResponse.<ClassSessionResponse>builder().message("Update session successfully").code("teacher-session-update").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<ClassSessionResponse>builder().success(false).message("Failed to update session").build());
+        }
     }
 
     @DeleteMapping("/sessions/{sessionId}")
-    public ResponseEntity<Void> deleteClassSession(@PathVariable String sessionId) {
-        teacherService.deleteClassSession(sessionId);
-        return ResponseEntity.noContent().build();
+    public ResponseEntity<ApiResponse<?>> deleteClassSession(@PathVariable String sessionId) {
+        try {
+            teacherService.deleteClassSession(sessionId);
+            return ResponseEntity.ok(ApiResponse.builder().message("Delete session successfully").code("teacher-session-delete").build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.builder().success(false).message("Failed to delete session").build());
+        }
     }
 
     @GetMapping("/sessions/{sessionId}/attendance")
-    public ResponseEntity<List<AttendanceDTO>> getSessionAttendance(@PathVariable String sessionId) {
-        return ResponseEntity.ok(teacherService.getSessionAttendance(sessionId));
+    public ResponseEntity<ApiResponse<List<AttendanceDTO>>> getSessionAttendance(@PathVariable String sessionId) {
+        try {
+            List<AttendanceDTO> out = teacherService.getSessionAttendance(sessionId);
+            return ResponseEntity.ok(ApiResponse.<List<AttendanceDTO>>builder().message("Get attendance successfully").code("teacher-session-attendance-get").data(out).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<AttendanceDTO>>builder().success(false).message("Failed to fetch attendance").build());
+        }
     }
 
     @PatchMapping("/attendance/{attendanceId}")
-    public ResponseEntity<AttendanceDTO> updateAttendanceStatus(
-            @PathVariable String attendanceId,
-            @Valid @RequestBody AttendanceUpdateRequest request) {
-        return ResponseEntity.ok(teacherService.updateAttendanceStatus(attendanceId, request));
+    public ResponseEntity<ApiResponse<AttendanceDTO>> updateAttendanceStatus(@PathVariable String attendanceId, @Valid @RequestBody AttendanceUpdateRequest request) {
+        try {
+            AttendanceDTO out = teacherService.updateAttendanceStatus(attendanceId, request);
+            return ResponseEntity.ok(ApiResponse.<AttendanceDTO>builder().message("Update attendance successfully").code("teacher-attendance-update").data(out).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<AttendanceDTO>builder().success(false).message("Failed to update attendance").build());
+        }
     }
 
     @GetMapping("/classes/{classId}/statistics")
-    public ResponseEntity<ClassStatistics> getClassStatistics(@PathVariable String classId) {
-        return ResponseEntity.ok(teacherService.getClassStatistics(classId));
+    public ResponseEntity<ApiResponse<ClassStatistics>> getClassStatistics(@PathVariable String classId) {
+        try {
+            ClassStatistics out = teacherService.getClassStatistics(classId);
+            return ResponseEntity.ok(ApiResponse.<ClassStatistics>builder().message("Get statistics successfully").code("teacher-class-statistics-get").data(out).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<ClassStatistics>builder().success(false).message("Failed to fetch statistics").build());
+        }
     }
+
 }

@@ -21,6 +21,7 @@ const AttendanceCapture: React.FC<Props> = ({
   const [capturing, setCapturing] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   const [livenessFailed, setLivenessFailed] = useState(false);
+  const [done, setDone] = useState(false);
   const [livenessDetails, setLivenessDetails] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<
     Array<{ text: string; hint?: string }>
@@ -188,6 +189,19 @@ const AttendanceCapture: React.FC<Props> = ({
             setLivenessFailed(false);
             setLivenessDetails(null);
             setMessage("Marked present — attendance recorded.");
+            // mark done and stop camera, then notify parent
+            setDone(true);
+            try {
+              if (videoRef.current && videoRef.current.srcObject) {
+                const tracks = (
+                  videoRef.current.srcObject as MediaStream
+                ).getTracks();
+                tracks.forEach((t) => t.stop());
+                videoRef.current.srcObject = null;
+              }
+            } catch (e) {
+              // ignore stop errors
+            }
             if (typeof onSuccess === "function") onSuccess(info);
           } else {
             // parse note for helpful hints - make parser tolerant to missing semicolons or extra whitespace
@@ -335,152 +349,156 @@ const AttendanceCapture: React.FC<Props> = ({
     }
   };
 
+  // if attendance done, hide the whole capture UI
+  if (done) return null;
+
   return (
-<div className="p-4 border rounded-xl bg-white shadow-sm space-y-3 max-w-3xl mx-auto">
-  {/* Header: Trạng thái chuyển động */}
-  <div className="flex items-center gap-2 text-sm">
-    <div
-      className={`w-3 h-3 rounded-full ${
-        motionDetected ? "bg-green-500" : "bg-gray-300"
-      }`}
-    />
-    <span
-      className={`font-medium ${
-        motionDetected ? "text-green-600" : "text-gray-500"
-      }`}
-    >
-      {motionDetected ? "Đang phát hiện chuyển động" : "Chưa phát hiện chuyển động"}
-    </span>
-  </div>
-
-  {/* Khung camera */}
-  <div className="relative w-full max-w-[700px] mx-auto aspect-[4/3] rounded-xl overflow-hidden bg-black">
-    <video
-      ref={videoRef}
-      className="w-full h-full object-cover"
-      playsInline
-      autoPlay
-      muted
-    />
-
-    {/* Overlay mờ xung quanh, chừa giữa tròn vừa phải */}
-    <div className="absolute inset-0 flex items-center justify-center">
-      <svg width="100%" height="100%">
-        <defs>
-          <mask id="mask">
-            <rect width="100%" height="100%" fill="white" />
-            <circle cx="50%" cy="50%" r="180" fill="black" /> 
-            {/* 👆 khung nhỏ hơn để vừa khung camera */}
-          </mask>
-        </defs>
-        <rect
-          width="100%"
-          height="100%"
-          fill="rgba(0,0,0,0.45)"
-          mask="url(#mask)"
+    <div className="p-4 border rounded-xl bg-white shadow-sm space-y-3 max-w-3xl mx-auto">
+      {/* Header: Trạng thái chuyển động */}
+      <div className="flex items-center gap-2 text-sm">
+        <div
+          className={`w-3 h-3 rounded-full ${
+            motionDetected ? "bg-green-500" : "bg-gray-300"
+          }`}
         />
-      </svg>
-    </div>
-
-    {/* Vòng tròn hướng dẫn */}
-    <div
-      className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] rounded-full border-[5px] transition-all duration-300 ${
-        motionDetected
-          ? "border-green-400 shadow-[0_0_25px_rgba(34,197,94,0.7)]"
-          : "border-gray-500"
-      }`}
-    ></div>
-
-    {/* Hướng dẫn */}
-    <div className="absolute bottom-4 w-full text-center text-white text-sm font-medium drop-shadow-md">
-      Giữ khuôn mặt trong khung tròn và đảm bảo ánh sáng tốt
-    </div>
-  </div>
-
-  <canvas ref={canvasRef} className="hidden" />
-
-  {/* Nút thao tác */}
-  <div className="flex flex-wrap gap-2 justify-center mt-3">
-    <button
-      onClick={captureAndSend}
-      disabled={capturing}
-      className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-60"
-    >
-      {capturing ? "Đang gửi..." : "Điểm danh"}
-    </button>
-
-    {livenessFailed && (
-      <button
-        onClick={captureAndSend}
-        disabled={capturing}
-        className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition disabled:opacity-60"
-      >
-        {capturing ? "Đang thử lại..." : "Thử lại Anti-Spoof"}
-      </button>
-    )}
-
-    <button
-      onClick={() => {
-        if (canvasRef.current) {
-          const a = document.createElement("a");
-          a.href = canvasRef.current.toDataURL();
-          a.download = "capture.png";
-          a.click();
-        }
-      }}
-      className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 font-medium hover:bg-gray-200 transition"
-    >
-      Tải ảnh
-    </button>
-  </div>
-
-  {/* Anti-spoof warning */}
-  {livenessFailed && (
-    <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-400 mt-2">
-      <div className="font-semibold text-yellow-800">
-        ❗ Anti-spoof check failed
+        <span
+          className={`font-medium ${
+            motionDetected ? "text-green-600" : "text-gray-500"
+          }`}
+        >
+          {motionDetected
+            ? "Đang phát hiện chuyển động"
+            : "Chưa phát hiện chuyển động"}
+        </span>
       </div>
-      <ul className="list-disc ml-5 mt-1 text-sm text-yellow-700 space-y-1">
-        <li>Đảm bảo ánh sáng tốt và nhìn thẳng vào camera.</li>
-        <li>Chớp mắt chậm hoặc xoay nhẹ đầu trái/phải.</li>
-        <li>Tháo kính phản chiếu hoặc mũ.</li>
-      </ul>
-      {livenessDetails && (
-        <div className="text-xs mt-2 text-gray-600">
-          Debug: {livenessDetails}
+
+      {/* Khung camera */}
+      <div className="relative w-full max-w-[700px] mx-auto aspect-[4/3] rounded-xl overflow-hidden bg-black">
+        <video
+          ref={videoRef}
+          className="w-full h-full object-cover"
+          playsInline
+          autoPlay
+          muted
+        />
+
+        {/* Overlay mờ xung quanh, chừa giữa tròn vừa phải */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <svg width="100%" height="100%">
+            <defs>
+              <mask id="mask">
+                <rect width="100%" height="100%" fill="white" />
+                <circle cx="50%" cy="50%" r="180" fill="black" />
+                {/* 👆 khung nhỏ hơn để vừa khung camera */}
+              </mask>
+            </defs>
+            <rect
+              width="100%"
+              height="100%"
+              fill="rgba(0,0,0,0.45)"
+              mask="url(#mask)"
+            />
+          </svg>
+        </div>
+
+        {/* Vòng tròn hướng dẫn */}
+        <div
+          className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[360px] h-[360px] rounded-full border-[5px] transition-all duration-300 ${
+            motionDetected
+              ? "border-green-400 shadow-[0_0_25px_rgba(34,197,94,0.7)]"
+              : "border-gray-500"
+          }`}
+        ></div>
+
+        {/* Hướng dẫn */}
+        <div className="absolute bottom-4 w-full text-center text-white text-sm font-medium drop-shadow-md">
+          Giữ khuôn mặt trong khung tròn và đảm bảo ánh sáng tốt
+        </div>
+      </div>
+
+      <canvas ref={canvasRef} className="hidden" />
+
+      {/* Nút thao tác */}
+      <div className="flex flex-wrap gap-2 justify-center mt-3">
+        <button
+          onClick={captureAndSend}
+          disabled={capturing}
+          className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-60"
+        >
+          {capturing ? "Đang gửi..." : "Điểm danh"}
+        </button>
+
+        {livenessFailed && (
+          <button
+            onClick={captureAndSend}
+            disabled={capturing}
+            className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition disabled:opacity-60"
+          >
+            {capturing ? "Đang thử lại..." : "Thử lại Anti-Spoof"}
+          </button>
+        )}
+
+        <button
+          onClick={() => {
+            if (canvasRef.current) {
+              const a = document.createElement("a");
+              a.href = canvasRef.current.toDataURL();
+              a.download = "capture.png";
+              a.click();
+            }
+          }}
+          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-800 font-medium hover:bg-gray-200 transition"
+        >
+          Tải ảnh
+        </button>
+      </div>
+
+      {/* Anti-spoof warning */}
+      {livenessFailed && (
+        <div className="p-3 rounded-lg bg-yellow-50 border border-yellow-400 mt-2">
+          <div className="font-semibold text-yellow-800">
+            ❗ Anti-spoof check failed
+          </div>
+          <ul className="list-disc ml-5 mt-1 text-sm text-yellow-700 space-y-1">
+            <li>Đảm bảo ánh sáng tốt và nhìn thẳng vào camera.</li>
+            <li>Chớp mắt chậm hoặc xoay nhẹ đầu trái/phải.</li>
+            <li>Tháo kính phản chiếu hoặc mũ.</li>
+          </ul>
+          {livenessDetails && (
+            <div className="text-xs mt-2 text-gray-600">
+              Debug: {livenessDetails}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Debug info */}
+      {message && (
+        <details className="bg-gray-50 p-2 rounded text-xs text-gray-700 whitespace-pre-wrap">
+          <summary className="cursor-pointer font-semibold text-gray-600">
+            Debug Info
+          </summary>
+          {message}
+        </details>
+      )}
+
+      {/* Gợi ý */}
+      {suggestions.length > 0 && (
+        <div className="mt-2 bg-gray-50 p-3 rounded-lg">
+          <div className="font-medium text-sm mb-1">💡 Gợi ý:</div>
+          <ul className="list-disc ml-5 text-sm text-gray-700 space-y-1">
+            {suggestions.map((s, i) => (
+              <li key={i}>
+                <div>{s.text}</div>
+                {s.hint && (
+                  <div className="text-xs text-gray-500">{s.hint}</div>
+                )}
+              </li>
+            ))}
+          </ul>
         </div>
       )}
     </div>
-  )}
-
-  {/* Debug info */}
-  {message && (
-    <details className="bg-gray-50 p-2 rounded text-xs text-gray-700 whitespace-pre-wrap">
-      <summary className="cursor-pointer font-semibold text-gray-600">
-        Debug Info
-      </summary>
-      {message}
-    </details>
-  )}
-
-  {/* Gợi ý */}
-  {suggestions.length > 0 && (
-    <div className="mt-2 bg-gray-50 p-3 rounded-lg">
-      <div className="font-medium text-sm mb-1">💡 Gợi ý:</div>
-      <ul className="list-disc ml-5 text-sm text-gray-700 space-y-1">
-        {suggestions.map((s, i) => (
-          <li key={i}>
-            <div>{s.text}</div>
-            {s.hint && (
-              <div className="text-xs text-gray-500">{s.hint}</div>
-            )}
-          </li>
-        ))}
-      </ul>
-    </div>
-  )}
-</div>
-
   );
 };
 

@@ -1,4 +1,5 @@
 import Home from "@pages/Home";
+import TeacherDashboard from "@pages/Teacher/Dashboard";
 import MainLayout from "@layouts/MainLayout";
 import ClassroomLayout from "@layouts/ClassroomLayout";
 import ClassSessionEntry from "@pages/ClassSession/ClassSessionEntry";
@@ -79,7 +80,7 @@ const routes = [
   // Teacher area
   {
     path: "/teacher",
-    Page: Home,
+    Page: TeacherDashboard,
     Layout: TeacherLayout,
   },
   // Student area
