@@ -39,6 +39,8 @@ import com.backend.service.AttendanceService;
 import com.backend.service.ClassSessionService;
 import com.backend.service.ClassroomService;
 import com.backend.service.UserService;
+import com.backend.mapper.UserMapper;
+import com.backend.dto.user.UserResponse;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -51,25 +53,24 @@ import lombok.experimental.FieldDefaults;
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminController {
     UserService userService;
+    UserMapper userMapper;
     ClassroomService classroomService;
     ClassSessionService classSessionService;
     AttendanceService attendanceService;
 
     // Users
     @GetMapping("/users")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> listUsers(@RequestParam(defaultValue = "1") int page,
-                                                                        @RequestParam(defaultValue = "10") int pageSize) {
-        Page<User> users = userService.getAllUsers(page, pageSize);
-        Map<String, Object> body = new HashMap<>();
-        body.put("data", users.getContent());
-        body.put("total", users.getTotalElements());
-        body.put("page", page);
-        body.put("pageSize", pageSize);
-        return ResponseEntity.ok(ApiResponse.<Map<String, Object>>builder()
-                .code("admin-users-list")
-                .message("List users")
-                .data(body)
-                .build());
+    public ResponseEntity<ApiResponse<com.backend.dto.admin.UsersPageResponse>> listUsers(@RequestParam(defaultValue = "1") int page,
+                                    @RequestParam(defaultValue = "10") int pageSize) {
+    Page<User> users = userService.getAllUsers(page, pageSize);
+    // map entities to DTOs to avoid serializing JPA entity graphs (which can be cyclic/deep)
+    java.util.List<UserResponse> dtoList = users.getContent().stream().map(userMapper::toUserResponse).toList();
+    com.backend.dto.admin.UsersPageResponse body = new com.backend.dto.admin.UsersPageResponse(dtoList, users.getTotalElements(), page, pageSize);
+    return ResponseEntity.ok(ApiResponse.<com.backend.dto.admin.UsersPageResponse>builder()
+        .code("admin-users-list")
+        .message("List users")
+        .data(body)
+        .build());
     }
 
     @PostMapping("/users")

@@ -2,6 +2,10 @@ package com.backend.controller;
 
 import java.util.List;
 import java.util.stream.Collectors;
+import org.springframework.security.core.context.SecurityContextHolder;
+
+import com.backend.repository.UserRepository;
+import com.backend.model.User;
 
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -48,10 +52,19 @@ public class TeacherController {
     ClassroomMapper classroomMapper;
     ClassSessionMapper classSessionMapper;
     UserMapper userMapper;
+    UserRepository userRepository;
 
     @GetMapping("/classes")
-    public ResponseEntity<ApiResponse<List<ClassroomResponse>>> getTeacherClasses() {
+    public ResponseEntity<ApiResponse<List<ClassroomResponse>>> getTeacherClasses(@org.springframework.web.bind.annotation.RequestParam(value = "userId", required = false) String userId) {
         try {
+            // validate optional userId equals authenticated teacher id
+            String email = SecurityContextHolder.getContext().getAuthentication().getName();
+            User authUser = userRepository.findByEmail(email).orElse(null);
+            if (authUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<List<ClassroomResponse>>builder().success(false).message("User not found").build());
+            if (userId != null && !userId.isBlank() && !userId.equals(authUser.getId())) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.<List<ClassroomResponse>>builder().success(false).message("Forbidden").build());
+            }
+
             List<Classroom> classes = teacherService.getTeacherClasses();
             List<ClassroomResponse> resp = classes == null ? List.of() : classes.stream().map(classroomMapper::toClassroomResponse).collect(Collectors.toList());
             return ResponseEntity.ok(ApiResponse.<List<ClassroomResponse>>builder().message("Get teacher classes successfully").code("teacher-classes-get").data(resp).build());
@@ -163,6 +176,18 @@ public class TeacherController {
             return ResponseEntity.ok(ApiResponse.<ClassStatistics>builder().message("Get statistics successfully").code("teacher-class-statistics-get").data(out).build());
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<ClassStatistics>builder().success(false).message("Failed to fetch statistics").build());
+        }
+    }
+
+    // GET /api/teacher/classes/user/{userId} - return classes for specified teacher id
+    @GetMapping("/classes/user/{userId}")
+    public ResponseEntity<ApiResponse<List<ClassroomResponse>>> getTeacherClassesByUser(@PathVariable String userId) {
+        try {
+            List<Classroom> classes = teacherService.getTeacherClassesByTeacherId(userId);
+            List<ClassroomResponse> resp = classes == null ? List.of() : classes.stream().map(classroomMapper::toClassroomResponse).collect(Collectors.toList());
+            return ResponseEntity.ok(ApiResponse.<List<ClassroomResponse>>builder().message("Get teacher classes successfully").code("teacher-classes-get-by-user").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<ClassroomResponse>>builder().success(false).message("Failed to fetch teacher classes").build());
         }
     }
 

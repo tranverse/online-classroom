@@ -16,9 +16,12 @@ const FilesPage: React.FC = () => {
 
   const load = useCallback(async (folderId?: string | null) => {
     try {
+      console.log("FilesPage: loading resources for folderId=", folderId);
       const f = await FilesService.listFolders();
+      console.log("FilesPage: folders response", f);
       setFolders(f || []);
       const r = await FilesService.listResources(folderId || undefined);
+      console.log("FilesPage: resources response", r);
       setResources(r || []);
     } catch (err) {
       console.error("Failed to load files", err);

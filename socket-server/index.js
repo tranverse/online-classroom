@@ -238,6 +238,88 @@ io.on("connection", (socket) => {
     }
   });
 
+  // Screen share request/approval/announce relays
+  socket.on("screen:request", (payload) => {
+    try {
+      console.log("server received screen:request", payload);
+      const rooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
+      rooms.forEach((r) =>
+        socket.to(r).emit("screen:request", { ...payload, from: socket.id })
+      );
+    } catch (e) {
+      console.warn("screen:request relay failed", e);
+    }
+  });
+
+  socket.on("screen:request:approved", (payload) => {
+    try {
+      console.log("server received screen:request:approved", payload);
+      const to = payload?.to;
+      if (to)
+        io.to(to).emit("screen:request:approved", {
+          ...payload,
+          from: socket.id,
+        });
+    } catch (e) {
+      console.warn("screen:request:approved relay failed", e);
+    }
+  });
+
+  socket.on("screen:share:announce", (payload) => {
+    try {
+      console.log("server received screen:share:announce", payload);
+      const rooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
+      rooms.forEach((r) =>
+        socket
+          .to(r)
+          .emit("screen:share:announce", { ...payload, from: socket.id })
+      );
+    } catch (e) {
+      console.warn("screen:share:announce relay failed", e);
+    }
+  });
+
+  socket.on("screen:share:stop", (payload) => {
+    try {
+      console.log("server received screen:share:stop", payload);
+      const rooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
+      rooms.forEach((r) =>
+        socket.to(r).emit("screen:share:stop", { ...payload, from: socket.id })
+      );
+    } catch (e) {
+      console.warn("screen:share:stop relay failed", e);
+    }
+  });
+
+  // Teacher ends the session for everyone
+  socket.on("session:end", (payload) => {
+    try {
+      console.log("server received session:end", payload);
+      const rooms = Array.from(socket.rooms).filter((r) => r !== socket.id);
+      rooms.forEach((r) =>
+        socket.to(r).emit("session:end", { ...payload, from: socket.id })
+      );
+    } catch (e) {
+      console.warn("session:end relay failed", e);
+    }
+  });
+
+  // Viewer -> server -> sharer ACK when viewer receives shared stream
+  socket.on("screen:stream:received", (payload) => {
+    try {
+      const to = payload?.to;
+      console.log("server received screen:stream:received", {
+        from: socket.id,
+        to,
+      });
+      if (to) {
+        io.to(to).emit("screen:stream:received", { from: socket.id });
+      }
+    } catch (e) {
+      console.warn("screen:stream:received relay failed", e);
+    }
+  });
+
   // Admin requests: teacher can request a student's camera to be turned on/off
   socket.on("admin:request-camera", ({ to, action }) => {
     try {

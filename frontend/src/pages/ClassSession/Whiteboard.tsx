@@ -7,6 +7,7 @@ type Tool = "pen" | "eraser" | "text" | "rect";
 const Whiteboard: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const containerRef = useRef<HTMLDivElement | null>(null);
+  const sharedVideoRef = useRef<HTMLVideoElement | null>(null);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const drawing = useRef(false);
   const rectDrawing = useRef(false);
@@ -34,6 +35,8 @@ const Whiteboard: React.FC = () => {
   const [boardImages, setBoardImages] = useState<Record<number, string | null>>(
     { 0: null }
   );
+  const [sharingStream, setSharingStream] = useState<MediaStream | null>(null);
+  const [sharingBy, setSharingBy] = useState<string | null>(null);
   // per-board stroke/text/rect history so boards remain editable
   const [histories, setHistories] = useState<Record<number, any[]>>({ 0: [] });
   const historiesRef = useRef<Record<number, any[]>>(histories);
@@ -644,6 +647,14 @@ const Whiteboard: React.FC = () => {
       } catch (e) {}
     });
 
+    // also listen for remote screen-share stop via socket
+    socket.on("screen:share:stop", (payload: any) => {
+      try {
+        setSharingStream(null);
+        setSharingBy(null);
+      } catch (e) {}
+    });
+
     // prev/next listeners are registered globally in a separate effect
 
     return () => {
@@ -654,9 +665,73 @@ const Whiteboard: React.FC = () => {
       socket.off("whiteboard:text", onText);
       socket.off("whiteboard:clear");
       socket.off("whiteboard:addBoard");
+      socket.off("screen:share:stop");
       // nothing here (global listeners cleaned up in their own effect)
     };
   }, [socket]);
+
+  // Listen for participant-remote-stream events from ParticipantsGrid
+  useEffect(() => {
+    const onRemote = (ev: any) => {
+      try {
+        const stream = ev?.detail?.stream as MediaStream | undefined;
+        const id = ev?.detail?.id;
+        console.debug("Whiteboard: received remote stream", {
+          id,
+          hasStream: !!stream,
+        });
+        if (stream) {
+          setSharingStream(stream);
+          if (id) setSharingBy(id);
+        }
+      } catch (e) {}
+    };
+    const onLocal = (ev: any) => {
+      try {
+        const stream = ev?.detail?.stream as MediaStream | undefined;
+        console.debug("Whiteboard: received local share stream", {
+          hasStream: !!stream,
+        });
+        if (stream) setSharingStream(stream);
+      } catch (e) {}
+    };
+    const onStopLocal = () => {
+      setSharingStream(null);
+      setSharingBy(null);
+    };
+
+    window.addEventListener(
+      "screen:participant-remote-stream",
+      onRemote as any
+    );
+    window.addEventListener("screen:share:local-stream", onLocal as any);
+    window.addEventListener("screen:share:stop-local", onStopLocal as any);
+    return () => {
+      window.removeEventListener(
+        "screen:participant-remote-stream",
+        onRemote as any
+      );
+      window.removeEventListener("screen:share:local-stream", onLocal as any);
+      window.removeEventListener("screen:share:stop-local", onStopLocal as any);
+    };
+  }, []);
+
+  // attach sharingStream to the dedicated video ref when it changes
+  useEffect(() => {
+    const v = sharedVideoRef.current;
+    if (v && sharingStream) {
+      try {
+        v.srcObject = sharingStream;
+        v.muted = sharingBy !== socket?.id;
+        v.play().catch((err) =>
+          console.debug("Whiteboard: shared video play rejected", err)
+        );
+      } catch (e) {
+        console.warn("Whiteboard: failed attaching shared stream to video", e);
+      }
+    }
+    return () => {};
+  }, [sharingStream, sharingBy, socket]);
 
   // Global prev/next listeners that always work and read the latest refs
   useEffect(() => {
@@ -821,6 +896,49 @@ const Whiteboard: React.FC = () => {
           onTouchMove={move}
           onTouchEnd={stop}
         />
+        {/* overlay shared screen on top of canvas but allow drawing (pointer-events none) */}
+        {sharingBy && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 pointer-events-none">
+            {sharingStream ? (
+              <div className="w-full h-full relative pointer-events-none">
+                <video
+                  autoPlay
+                  playsInline
+                  muted={sharingBy !== socket?.id}
+                  className="w-full h-full object-contain"
+                  ref={sharedVideoRef}
+                />
+                {/* clickable fallback button for autoplay-restricted browsers (button must accept pointer events) */}
+                {sharingBy !== socket?.id && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                    <button
+                      className="px-4 py-2 bg-white text-black rounded shadow"
+                      onClick={() => {
+                        try {
+                          const v = sharedVideoRef.current;
+                          if (!v) return;
+                          v.muted = false;
+                          v.play().catch((err) =>
+                            console.warn("play failed", err)
+                          );
+                          console.debug(
+                            "Whiteboard: user initiated play for shared stream"
+                          );
+                        } catch (err) {
+                          console.warn("click to view failed", err);
+                        }
+                      }}
+                    >
+                      Click to view
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-white">{`${sharingBy} is sharing`}</div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

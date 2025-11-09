@@ -115,13 +115,23 @@ public class StudentController {
     // GET /api/student/classrooms
     @GetMapping("/classrooms")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<ApiResponse<java.util.List<ClassroomResponse>>> getMyClassrooms() {
+    public ResponseEntity<ApiResponse<java.util.List<ClassroomResponse>>> getMyClassrooms(@org.springframework.web.bind.annotation.RequestParam(value = "userId", required = false) String userId) {
         try {
             String email = SecurityContextHolder.getContext().getAuthentication().getName();
-            User user = userRepository.findByEmail(email).orElse(null);
-            if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<java.util.List<ClassroomResponse>>builder().success(false).message("User not found").build());
-            java.util.List<com.backend.model.StudentClassroom> links = studentClassroomRepository.findByStudentId(user.getId());
-            log.debug("getMyClassrooms: userId={} email={} linksFound={}", user.getId(), email, links == null ? 0 : links.size());
+            User authUser = userRepository.findByEmail(email).orElse(null);
+            if (authUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<java.util.List<ClassroomResponse>>builder().success(false).message("User not found").build());
+
+            String studentIdToQuery = authUser.getId();
+            if (userId != null && !userId.isBlank()) {
+                // allow only if requested id equals authenticated student's id
+                if (!userId.equals(authUser.getId())) {
+                    return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.<java.util.List<ClassroomResponse>>builder().success(false).message("Forbidden").build());
+                }
+                studentIdToQuery = userId;
+            }
+
+            java.util.List<com.backend.model.StudentClassroom> links = studentClassroomRepository.findByStudentId(studentIdToQuery);
+            log.debug("getMyClassrooms: userId={} email={} linksFound={}", authUser.getId(), email, links == null ? 0 : links.size());
             java.util.List<ClassroomResponse> out = new java.util.ArrayList<>();
             for (com.backend.model.StudentClassroom link : links) {
                 if (link.getClassroom() == null) continue;
@@ -132,6 +142,49 @@ public class StudentController {
         } catch (Exception ex) {
             log.error("Failed to fetch classrooms", ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<java.util.List<ClassroomResponse>>builder().success(false).message("Failed").build());
+        }
+    }
+
+    // GET /api/student/classrooms/{id} - student-facing classroom details
+    @GetMapping("/classrooms/{id}")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getClassroomDetails(@org.springframework.web.bind.annotation.PathVariable String id) {
+        try {
+            String email = SecurityContextHolder.getContext().getAuthentication().getName();
+            User authUser = userRepository.findByEmail(email).orElse(null);
+            if (authUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("User not found").build());
+
+            // verify student is enrolled in this classroom
+            boolean enrolled = studentClassroomRepository.existsByStudentIdAndClassroomId(authUser.getId(), id);
+            if (!enrolled) {
+                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("Forbidden").build());
+            }
+
+            com.backend.model.Classroom classroom = classroomRepository.findById(id).orElse(null);
+            if (classroom == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("Classroom not found").build());
+
+            java.util.Map<String,Object> out = new java.util.HashMap<>();
+            out.put("classroom", classroomMapper.toClassroomResponse(classroom));
+
+            java.util.List<com.backend.model.StudentClassroom> links = studentClassroomRepository.findByClassroomId(id);
+            java.util.List<java.util.Map<String,Object>> students = new java.util.ArrayList<>();
+            if (links != null) {
+                for (com.backend.model.StudentClassroom link : links) {
+                    if (link.getStudent() == null) continue;
+                    java.util.Map<String,Object> s = new java.util.HashMap<>();
+                    s.put("id", link.getStudent().getId());
+                    s.put("name", link.getStudent().getName());
+                    s.put("email", link.getStudent().getEmail());
+                    s.put("avatar", link.getStudent().getAvatar());
+                    students.add(s);
+                }
+            }
+            out.put("students", students);
+
+            return ResponseEntity.ok(ApiResponse.<java.util.Map<String,Object>>builder().message("classroom-details").data(out).build());
+        } catch (Exception ex) {
+            log.error("Failed to fetch classroom details", ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("Failed").build());
         }
     }
 

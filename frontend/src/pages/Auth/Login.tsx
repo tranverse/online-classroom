@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "react-toastify";
 import { useAppDispatch } from "../../store/hooks";
 import { loginUser } from "../../store/userSlice";
+import authMemory from "@services/authMemory";
 
 const Login: React.FC = () => {
   const navigate = useNavigate();
@@ -18,9 +19,7 @@ const Login: React.FC = () => {
       if (loginUser.fulfilled.match(resultAction)) {
         toast.success("Login successful");
         // resultAction.payload should be the user object
-        const user =
-          (resultAction.payload as any) ||
-          JSON.parse(localStorage.getItem("user") || "null");
+        const user = (resultAction.payload as any) || authMemory.getUser();
         const role = user?.role;
         if (role === "ADMIN") navigate("/admin");
         else if (role === "TEACHER") navigate("/teacher");

@@ -1,4 +1,5 @@
 import axios from "@tools/axios.tool";
+import authMemory from "@services/authMemory";
 
 const BASE = "/api/comments";
 
@@ -8,7 +9,7 @@ const CommentService = {
       // attach X-User-Id header from persisted user when available
       let headers: any = {};
       try {
-        const user = JSON.parse(localStorage.getItem("user") || "null");
+        const user = authMemory.getUser();
         if (user && user.id) headers["X-User-Id"] = user.id;
       } catch (e) {}
 

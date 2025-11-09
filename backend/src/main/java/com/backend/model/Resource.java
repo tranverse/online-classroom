@@ -8,6 +8,7 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -38,10 +39,12 @@ public class Resource {
 
     @ManyToOne
     @JoinColumn(name = "folder_id")
+    @JsonIgnore
     Folder folder;
 
     @ManyToOne
     @JoinColumn(name = "user_id")
+    @JsonIgnore
     User uploadedBy;
 
     // explicit setters (in case lombok not processed in some environments)

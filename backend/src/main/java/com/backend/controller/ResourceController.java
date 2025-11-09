@@ -7,6 +7,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
+import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.backend.dto.ApiResponse;
@@ -53,10 +54,10 @@ public class ResourceController {
 
     @PostMapping(value = "/upload", consumes = {"multipart/form-data"})
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
-    public ResponseEntity<ApiResponse<Resource>> uploadResource(@RequestPart("file") MultipartFile file, @RequestParam(required = false) String folderId) {
+    public ResponseEntity<ApiResponse<com.backend.dto.resource.ResourceResponse>> uploadResource(@RequestPart("file") MultipartFile file, @RequestParam(required = false) String folderId, HttpServletRequest request) {
             String email = SecurityContextHolder.getContext().getAuthentication().getName();
             User user = userRepository.findByEmail(email).orElse(null);
-            if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<Resource>builder().success(false).message("User not found").build());
+            if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<com.backend.dto.resource.ResourceResponse>builder().success(false).message("User not found").build());
 
             // Save file bytes to local uploads folder
             try {
@@ -68,10 +69,34 @@ public class ResourceController {
                     java.nio.file.Files.copy(in, dest, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
                 }
                 String storagePath = dest.toString();
-                Resource r = resourceService.saveResourceMetadata(file.getOriginalFilename(), storagePath, file.getContentType(), file.getSize(), folderId, user);
-                return ResponseEntity.ok(ApiResponse.<Resource>builder().message("Uploaded").data(r).build());
+                // Detailed debug: show parameters and query to detect where folderId lives
+                try {
+                    java.util.Map<String, String[]> params = request.getParameterMap();
+                    System.out.println("uploadResource: request.getParameterMap keys=" + java.util.Arrays.toString(params.keySet().toArray()));
+                    if (params.containsKey("folderId")) {
+                        System.out.println("uploadResource: folderId param value(s)=" + java.util.Arrays.toString(params.get("folderId")));
+                    }
+                    System.out.println("uploadResource: raw queryString=" + request.getQueryString());
+                } catch (Exception e) {
+                    System.out.println("uploadResource: failed to read parameter map: " + e.getMessage());
+                }
+
+                // If folderId wasn't bound via @RequestParam, try to read it from the multipart/form-data fields
+                String resolvedFolderId = folderId;
+                if (resolvedFolderId == null) {
+                    try {
+                        String p = request.getParameter("folderId");
+                        if (p != null && !p.isBlank()) resolvedFolderId = p;
+                    } catch (Exception ignored) {}
+                }
+
+                Resource r = resourceService.saveResourceMetadata(file.getOriginalFilename(), storagePath, file.getContentType(), file.getSize(), resolvedFolderId, user);
+                // Log folder association for debugging
+                System.out.println("uploadResource: received folderId=" + resolvedFolderId + ", saved resource folderId=" + (r.getFolder() != null ? r.getFolder().getId() : "null"));
+                com.backend.dto.resource.ResourceResponse rr = com.backend.dto.resource.ResourceResponse.from(r);
+                return ResponseEntity.ok(ApiResponse.<com.backend.dto.resource.ResourceResponse>builder().message("Uploaded").data(rr).build());
             } catch (java.io.IOException ex) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<Resource>builder().success(false).message("Upload failed").build());
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<com.backend.dto.resource.ResourceResponse>builder().success(false).message("Upload failed").build());
             }
     }
 
@@ -101,9 +126,10 @@ public class ResourceController {
 
     @GetMapping
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
-    public ResponseEntity<ApiResponse<List<Resource>>> listResources(@RequestParam(required = false) String folderId) {
+    public ResponseEntity<ApiResponse<java.util.List<com.backend.dto.resource.ResourceResponse>>> listResources(@RequestParam(required = false) String folderId) {
         List<Resource> list = resourceService.listByFolder(folderId);
-        return ResponseEntity.ok(ApiResponse.<List<Resource>>builder().data(list).build());
+        java.util.List<com.backend.dto.resource.ResourceResponse> dto = list.stream().map(com.backend.dto.resource.ResourceResponse::from).toList();
+        return ResponseEntity.ok(ApiResponse.<java.util.List<com.backend.dto.resource.ResourceResponse>>builder().data(dto).build());
     }
 
     @DeleteMapping("/{id}")

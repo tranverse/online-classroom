@@ -1,64 +1,59 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { CiUser } from "react-icons/ci";
-import { IoIosNotificationsOutline } from "react-icons/io";
-import { FiFile } from "react-icons/fi"; // đổi icon upload
-import { FiFolder } from "react-icons/fi";
+import { FiFolder, FiHome, FiBookOpen } from "react-icons/fi";
 import { useAppSelector } from "../../store/hooks";
 import { selectCurrentUser } from "../../store/selectors";
 import { Link } from "react-router-dom";
+// ClassroomService no longer used here; header links directly to classroom lists
 
-type Props = {
-  onUpload?: (file: File) => void;
-};
-
-const UserHeader: React.FC<Props> = ({ onUpload }) => {
+const UserHeader: React.FC = () => {
   const user = useAppSelector(selectCurrentUser);
+  // determine classroom list target: teacher -> /teacher, others -> /student/classrooms
+  const userId = user && ((user as any).id || (user as any).userId);
+  const baseLink =
+    user && (user as any).role === "TEACHER"
+      ? "/teacher"
+      : "/student/classrooms";
+  const classroomLink = userId
+    ? `${baseLink}/user/${encodeURIComponent(userId)}`
+    : baseLink;
 
   return (
     <header className="bg-white border-b shadow-sm px-6 py-3">
-      <div className="flex flex-col md:flex-row justify-between items-center gap-3">
-        {/* Search */}
-        <div className="flex w-full md:w-1/3">
-          <input
-            type="text"
-            placeholder="Search..."
-            className="w-full border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        {/* Actions */}
-        <div className="flex items-center gap-4">
-          {/* Upload Document */}
-          {/* Files quick link */}
+      <div className="flex justify-between items-center">
+        {/* Left: Home + Files */}
+        <div className="flex items-center gap-4 text-gray-700">
           <Link
-            to="/student/files"
-            className="flex items-center gap-1 text-gray-700 hover:text-blue-600"
+            to="/student/home"
+            className="flex items-center gap-1 hover:text-blue-600 transition-colors"
           >
-            <FiFolder className="text-xl" />
-            <span className="hidden md:inline text-sm">Files</span>
+            <FiHome className="text-xl" />
+            <span className="hidden md:inline text-sm font-medium">Home</span>
           </Link>
 
-          <label className="flex items-center gap-1 cursor-pointer text-gray-700 hover:text-blue-600 transition-colors">
-            <FiFile className="text-xl" />
-            <span className="hidden md:inline text-sm">Upload</span>
-            <input
-              type="file"
-              onChange={(e) => {
-                const f = e.target.files && e.target.files[0];
-                if (f && onUpload) onUpload(f);
-              }}
-              className="hidden"
-            />
-          </label>
+          <Link
+            to="/student/files"
+            className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+          >
+            <FiFolder className="text-xl" />
+            <span className="hidden md:inline text-sm font-medium">Files</span>
+          </Link>
+        </div>
 
-          {/* Notifications */}
-          <div className="relative text-gray-700 hover:text-blue-600 transition-colors cursor-pointer">
-            <IoIosNotificationsOutline className="text-xl" />
-            <span className="absolute -top-1 -right-1 w-2 h-2 bg-red-500 rounded-full"></span>
-          </div>
+        {/* Right: Classroom + User */}
+        <div className="flex items-center gap-4">
+          {/* Link to classroom lists: teachers -> teacher dashboard, students -> student classrooms */}
+          <Link
+            to={classroomLink}
+            className="flex items-center gap-1 hover:text-blue-600 transition-colors"
+          >
+            <FiBookOpen className="text-xl" />
+            <span className="hidden md:inline text-sm font-medium">
+              Classrooms
+            </span>
+          </Link>
 
-          {/* User */}
-          <Link to={`/student/profile-attendance`}>
+          <Link to="/student/profile-attendance">
             <div className="flex items-center gap-2 cursor-pointer">
               {user?.avatar ? (
                 <img
@@ -69,7 +64,7 @@ const UserHeader: React.FC<Props> = ({ onUpload }) => {
               ) : (
                 <CiUser className="text-2xl text-gray-700" />
               )}
-              <span className="hidden md:inline text-sm font-medium">
+              <span className="hidden md:inline text-sm font-medium text-gray-700">
                 {user?.name || "User"}
               </span>
             </div>

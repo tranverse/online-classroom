@@ -280,7 +280,13 @@ export const ClassroomsPage: React.FC = () => {
   const fetchUsers = async () => {
     try {
       const response = await AdminService.getUsers(1, 200); // Fetch up to 200 users
-      const all = response.data || [];
+      const paginated = response || {
+        data: [],
+        total: 0,
+        page: 1,
+        pageSize: 200,
+      };
+      const all = paginated.data || [];
       setUsers(all);
       setTeachers(all.filter((user: User) => user.role === "TEACHER"));
     } catch (error) {

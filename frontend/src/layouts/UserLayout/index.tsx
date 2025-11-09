@@ -1,16 +1,11 @@
 import React from "react";
 import UserHeader from "./Header";
 
-type Props = {
-  children: React.ReactNode;
-  onUpload?: (file: File) => void;
-};
-
-const UserLayout: React.FC<Props> = ({ children, onUpload }) => {
+const UserLayout: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   return (
-    <div className="min-h-screen bg-gray-50">
-      <UserHeader onUpload={onUpload} />
-      <div className="p-6">{children}</div>
+    <div className="flex flex-col min-h-screen bg-gradient-to-br from-emerald-50 to-white">
+      <UserHeader />
+      <main className="flex-1 overflow-hidden">{children}</main>
     </div>
   );
 };

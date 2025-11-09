@@ -9,6 +9,8 @@ import TeacherLayout from "@layouts/TeacherLayout";
 import StudentLayout from "@layouts/StudentLayout";
 import StudentDashboard from "@pages/Student/Dashboard";
 import AdminLayout from "@layouts/AdminLayout";
+import TeacherClassroomDetails from "@pages/Teacher/ClassroomDetails";
+import PublicClassroomDetails from "@pages/Classroom/PublicDetails";
 
 // Admin pages
 import { AdminDashboard } from "@pages/Admin/Dashboard";
@@ -77,10 +79,26 @@ const routes = [
     Page: ClassSessionEntry,
     Layout: ClassroomLayout,
   },
+  // public/student accessible classroom URL
+  {
+    path: "/classroom/:id",
+    Page: PublicClassroomDetails,
+    Layout: ClassroomLayout,
+  },
   // Teacher area
   {
     path: "/teacher",
     Page: TeacherDashboard,
+    Layout: TeacherLayout,
+  },
+  {
+    path: "/teacher/user/:id",
+    Page: ClassroomDetails,
+    Layout: TeacherLayout,
+  },
+  {
+    path: "/teacher/classrooms/:id",
+    Page: TeacherClassroomDetails,
     Layout: TeacherLayout,
   },
   // Student area
@@ -96,6 +114,11 @@ const routes = [
   },
   {
     path: "/student/classrooms",
+    Page: ClassroomsPage,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/classrooms/user/:id",
     Page: ClassroomsPage,
     Layout: StudentLayout,
   },

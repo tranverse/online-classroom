@@ -14,7 +14,19 @@ const FilesService = {
   uploadFile: async (file: File, folderId?: string) => {
     const form = new FormData();
     form.append("file", file);
+    if (folderId) form.append("folderId", folderId);
     const url = `${BASE}/upload${folderId ? `?folderId=${folderId}` : ""}`;
+    console.debug("FilesService.uploadFile: url=", url);
+    try {
+      const keys: string[] = [];
+      form.forEach((v, k) => keys.push(k));
+      console.debug("FilesService.uploadFile: form keys=", keys);
+    } catch (e) {
+      console.debug(
+        "FilesService.uploadFile: failed to enumerate form keys",
+        e
+      );
+    }
     // Let the browser set Content-Type (including boundary) for FormData.
     const { data } = await axios.post(url, form);
     return data?.data;

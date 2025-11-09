@@ -18,9 +18,11 @@ const UploadButton: React.FC<Props> = ({ folderId, onUploaded }) => {
     const file = e.target.files?.[0];
     if (!file) return;
     // capture ref locally so we can reset after async
+    console.debug("UploadButton: calling uploadFile with folderId=", folderId);
     const inputEl = ref.current;
     try {
-      await FilesService.uploadFile(file, folderId);
+      const resp = await FilesService.uploadFile(file, folderId);
+      console.log("UploadButton: upload response:", resp);
       toast?.show
         ? toast.show("Uploaded", "success")
         : console.info("Uploaded");
@@ -30,12 +32,12 @@ const UploadButton: React.FC<Props> = ({ folderId, onUploaded }) => {
       if (err?.response?.status === 401) {
         toast?.show
           ? toast.show("Unauthorized — please login to upload", "error")
-          : console.warn("Unauthorized — please login to upload");
+          : console.log("Unauthorized — please login to upload");
         nav("/login");
       } else {
         toast?.show
           ? toast.show("Upload failed", "error")
-          : console.warn("Upload failed");
+          : console.log("Upload failed");
       }
     } finally {
       if (inputEl) inputEl.value = "";

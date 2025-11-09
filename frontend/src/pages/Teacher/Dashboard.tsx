@@ -1,9 +1,8 @@
 import React, { useEffect, useState } from "react";
-import StudentService from "../../services/student.service";
-import ClassroomService from "../../services/classroom.service";
-import ClassSessionService from "../../services/classSession.service";
 import TeacherService from "../../services/teacher.service";
+import ClassroomService from "../../services/classroom.service";
 import { Link } from "react-router-dom";
+import authMemory from "@services/authMemory";
 
 const TeacherDashboard: React.FC = () => {
   const [classrooms, setClassrooms] = useState<any[]>([]);
@@ -40,14 +39,14 @@ const TeacherDashboard: React.FC = () => {
           sessions = [];
         }
 
-        const rawUser = localStorage.getItem("user");
-        const currentUser = rawUser ? JSON.parse(rawUser) : null;
+        const currentUser = authMemory.getUser() || null;
         const userId = currentUser?.id || currentUser?.userId || null;
 
         const teacherClassrooms = (cls || []).filter((c: any) => {
           return (
             c.teacherId === userId ||
-            (c.teacher && (c.teacher.id === userId || c.teacher.userId === userId)) ||
+            (c.teacher &&
+              (c.teacher.id === userId || c.teacher.userId === userId)) ||
             c.ownerId === userId
           );
         });
@@ -76,61 +75,74 @@ const TeacherDashboard: React.FC = () => {
   }, []);
 
   return (
-    <div className="p-6 bg-gray-50 min-h-screen">
-      <h1 className="text-3xl font-bold mb-6 text-gray-800">Teacher Dashboard</h1>
+    <div className="w-full h-screen flex flex-col items-center bg-gradient-to-br from-emerald-50 to-white p-6">
+      <header className="text-center mb-6">
+        <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
+          Teacher Dashboard
+        </h1>
+        <p className="text-gray-500 mt-1 text-sm md:text-base">
+          View and manage your classrooms and upcoming sessions
+        </p>
+      </header>
 
       {loading && (
-        <div className="text-center py-10 text-gray-500">Loading classrooms...</div>
+        <div className="text-gray-500 text-center py-10">
+          Loading classrooms...
+        </div>
       )}
 
       {!loading && classrooms.length === 0 && (
-        <div className="text-center py-10 text-gray-400">No classrooms found</div>
+        <div className="text-gray-400 text-center py-10">
+          No classrooms found
+        </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="w-full max-w-6xl flex-1 overflow-y-auto space-y-6 pr-2 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-gray-100">
         {classrooms.map((c) => (
           <div
             key={c.id}
-            className="bg-white rounded-xl shadow-md hover:shadow-lg transition-shadow duration-200 p-5 flex flex-col justify-between"
+            className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-all p-6 flex flex-col"
           >
-            <div>
-              <div className="flex justify-between items-start">
-                <div>
-                  <h2 className="text-xl font-semibold text-gray-800">{c.name}</h2>
-                  <p className="text-sm text-gray-500">{c.code}</p>
-                </div>
-                <Link
-                  to={`/classroom/${c.id}`}
-                  className="text-blue-600 text-sm font-medium hover:underline"
-                >
-                  Open
-                </Link>
+            <div className="flex justify-between items-start">
+              <div>
+                <h2 className="text-xl font-semibold text-gray-800">
+                  {c.name}
+                </h2>
+                <p className="text-sm text-gray-500">{c.code}</p>
               </div>
-
-              {c.upcomingSessions && c.upcomingSessions.length > 0 && (
-                <div className="mt-4">
-                  <h3 className="font-medium text-gray-700">Upcoming Sessions</h3>
-                  <ul className="mt-2 space-y-2">
-                    {c.upcomingSessions.map((s: any) => (
-                      <li
-                        key={s.id}
-                        className="flex justify-between items-center bg-gray-100 px-3 py-2 rounded hover:bg-gray-200 transition-colors"
-                      >
-                        <span className="text-sm text-gray-700">
-                          {s.title || s.startsAt}
-                        </span>
-                        <Link
-                          to={`/classroom/online/${s.id}`}
-                          className="text-blue-600 text-sm font-medium hover:underline"
-                        >
-                          Open
-                        </Link>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
+              <Link
+                to={`/student/classrooms/${c.id}`}
+                className="text-blue-600 text-sm font-medium hover:underline"
+              >
+                Open
+              </Link>
             </div>
+
+            {c.upcomingSessions && c.upcomingSessions.length > 0 && (
+              <div className="mt-4">
+                <h3 className="text-gray-700 font-medium mb-2">
+                  Upcoming Sessions
+                </h3>
+                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
+                  {c.upcomingSessions.map((s: any) => (
+                    <div
+                      key={s.id}
+                      className="flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 hover:bg-emerald-50 transition"
+                    >
+                      <span className="text-gray-700 text-sm">
+                        {s.title || s.startsAt}
+                      </span>
+                      <Link
+                        to={`/classroom/online/${s.id}`}
+                        className="text-blue-600 text-sm font-medium hover:underline"
+                      >
+                        Open
+                      </Link>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         ))}
       </div>

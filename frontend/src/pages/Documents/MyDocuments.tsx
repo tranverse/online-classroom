@@ -1,6 +1,6 @@
 import { FileOutlined, FolderOutlined } from "@ant-design/icons";
 import { Breadcrumb, Button, List, Modal, Space, Upload, message } from "antd";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DocumentService } from "../../services/document.service";
 
@@ -39,19 +39,11 @@ const MyDocuments = () => {
   };
 
   const handleUpload = async (file: File) => {
-    try {
-      const formData = new FormData();
-      formData.append("file", file);
-      formData.append("path", currentPath.join("/"));
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("path", currentPath.join("/"));
 
-      await DocumentService.uploadFile(formData);
-      message.success("File uploaded successfully");
-      refreshDocuments();
-      return false; // Prevent default upload behavior
-    } catch (error) {
-      message.error("Failed to upload file");
-      return false;
-    }
+    await DocumentService.uploadFile(formData);
   };
 
   const handleDelete = async () => {
@@ -78,14 +70,18 @@ const MyDocuments = () => {
   };
 
   const navigateToFolder = (folder: Document) => {
-    setCurrentPath([...currentPath, folder.name]);
-    refreshDocuments();
+    setCurrentPath((prev) => [...prev, folder.name]);
   };
 
   const navigateToBreadcrumb = (index: number) => {
-    setCurrentPath(currentPath.slice(0, index + 1));
-    refreshDocuments();
+    setCurrentPath((prev) => prev.slice(0, index + 1));
   };
+
+  // load documents when component mounts and whenever currentPath changes
+  useEffect(() => {
+    refreshDocuments();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPath]);
 
   return (
     <div className="p-6">
@@ -110,7 +106,18 @@ const MyDocuments = () => {
           Create Folder
         </Button>
         <Upload
-          customRequest={({ file }) => handleUpload(file as File)}
+          customRequest={async ({ file, onSuccess, onError }) => {
+            try {
+              await handleUpload(file as File);
+              onSuccess && onSuccess(null);
+              message.success("File uploaded successfully");
+              // refresh will be triggered by useEffect since currentPath is unchanged
+              refreshDocuments();
+            } catch (err) {
+              onError && onError(err as Error);
+              message.error("Failed to upload file");
+            }
+          }}
           showUploadList={false}
         >
           <Button>Upload File</Button>

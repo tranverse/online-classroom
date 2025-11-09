@@ -46,6 +46,7 @@ public class Attendance {
 
     @ManyToOne
     @JoinColumn(name = "class_session_id")
+    @com.fasterxml.jackson.annotation.JsonBackReference(value = "classsession_attendance")
     ClassSession classSession;
 
     // audit and verification fields

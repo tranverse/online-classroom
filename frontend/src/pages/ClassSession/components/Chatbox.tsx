@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useState } from "react";
 import { IoMdSend } from "react-icons/io";
 import { SocketContext } from "../index";
 import CommentService from "@services/comment.service";
+import authMemory from "@services/authMemory";
 
 const Chatbox = () => {
   const socket = useContext(SocketContext as any) as any;
@@ -10,23 +11,15 @@ const Chatbox = () => {
 
   useEffect(() => {
     if (!socket) return;
-    const onMsg = (m: any) => {
-      setMessages((s) => [...s, m]);
-    };
+    const onMsg = (m: any) => setMessages((s) => [...s, m]);
     socket.on("chat:message", onMsg);
-    return () => {
-      try {
-        socket.off("chat:message", onMsg);
-      } catch (e) {}
-    };
+    return () => socket.off("chat:message", onMsg);
   }, [socket]);
 
   const send = () => {
     if (!text.trim()) return;
     const trimmed = text.trim();
-    const user = localStorage.getItem("user")
-      ? JSON.parse(localStorage.getItem("user")!)
-      : null;
+    const user = authMemory.getUser() || null;
     const fromName = user?.name || "Me";
     const optimistic = {
       _optimistic: true,
@@ -35,50 +28,21 @@ const Chatbox = () => {
       ts: Date.now(),
     };
 
-    // show optimistic message immediately
     setMessages((s) => [...s, optimistic]);
-
-    // emit realtime message so other clients see it
     try {
       socket?.emit("chat:message", {
         text: trimmed,
         from: fromName,
         ts: optimistic.ts,
       });
-    } catch (e) {
-      console.warn("socket emit failed", e);
-    }
+    } catch (e) {}
 
-    // persist to backend
     const sessionId = (window as any).__CURRENT_CLASSSESSION_ID || null;
     (async () => {
-      if (!sessionId) {
-        // no session id — leave optimistic message
-        setText("");
-        return;
-      }
-
-      // ensure user id present for backend X-User-Id header
-      let userObj = null;
-      try {
-        userObj = JSON.parse(localStorage.getItem("user") || "null");
-      } catch (e) {}
-      if (!userObj || !userObj.id) {
-        console.warn("Cannot persist comment: no user.id in localStorage");
-        setMessages((list) =>
-          list.map((m) =>
-            m._optimistic && m.ts === optimistic.ts
-              ? { ...m, _failed: true }
-              : m
-          )
-        );
-        setText("");
-        return;
-      }
+      if (!sessionId) return setText("");
 
       try {
         const created = await CommentService.create(sessionId, trimmed);
-        // normalize server DTO to client message shape: { text, from, ts }
         const normalized = {
           id: created?.id,
           text: created?.message ?? created?.text,
@@ -87,14 +51,12 @@ const Chatbox = () => {
             ? new Date(created.createdAt).getTime()
             : created?.ts ?? Date.now(),
         };
-        // replace optimistic entry with normalized server-provided message
         setMessages((list) =>
           list.map((m) =>
             m._optimistic && m.ts === optimistic.ts ? normalized : m
           )
         );
-      } catch (err: any) {
-        console.error("Failed to save comment", err);
+      } catch (err) {
         setMessages((list) =>
           list.map((m) =>
             m._optimistic && m.ts === optimistic.ts
@@ -108,34 +70,36 @@ const Chatbox = () => {
     })();
   };
 
-  const currentUser = localStorage.getItem("user")
-    ? JSON.parse(localStorage.getItem("user")!).name
-    : "Me";
+  const currentUser = authMemory.getUser()?.name || "Me";
 
   return (
-    <div className="bg-gray-50 rounded-xl shadow-md p-4 flex flex-col h-full max-h-full">
-      <div className="flex-1 overflow-y-auto mb-3 space-y-3 pr-2 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
+    <div className="flex flex-col h-full bg-gradient-to-br from-gray-50 to-gray-100 rounded-2xl border border-gray-200 shadow-sm">
+      {/* Header */}
+      <div className="px-4 py-2 border-b border-gray-200 text-sm text-gray-600 font-medium bg-white/70 backdrop-blur-sm rounded-t-2xl">
+        💬 Class Chat
+      </div>
+
+      {/* Messages */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-transparent">
+        {messages.length === 0 && (
+          <div className="text-center text-gray-400 text-sm mt-10">
+            No messages yet. Start the conversation!
+          </div>
+        )}
+
         {messages.map((m, idx) => {
-          // normalize fields from either optimistic or server shapes
           const from = m.from ?? m.userName ?? "Me";
           const textVal = m.text ?? m.message ?? "";
-          let tsVal: number | null = null;
-          if (typeof m.ts === "number") tsVal = m.ts;
-          else if (typeof m.ts === "string") {
-            const parsed = Date.parse(m.ts);
-            tsVal = isNaN(parsed) ? null : parsed;
-          } else if (m.createdAt) {
-            const parsed = Date.parse(m.createdAt);
-            tsVal = isNaN(parsed) ? null : parsed;
-          }
-
+          const tsVal =
+            typeof m.ts === "number"
+              ? m.ts
+              : Date.parse(m.ts || m.createdAt || "") || null;
           const displayTime = tsVal
             ? new Date(tsVal).toLocaleTimeString([], {
                 hour: "2-digit",
                 minute: "2-digit",
               })
             : "";
-
           const isMe = from === currentUser;
 
           return (
@@ -144,40 +108,54 @@ const Chatbox = () => {
               className={`flex ${isMe ? "justify-end" : "justify-start"}`}
             >
               <div
-                className={`max-w-[70%] px-4 py-2 rounded-lg text-sm ${
+                className={`group relative max-w-[75%] px-4 py-2 rounded-2xl text-sm transition-all ${
                   isMe
                     ? "bg-blue-600 text-white rounded-br-none"
-                    : "bg-white text-gray-800 rounded-bl-none shadow-sm"
+                    : "bg-white border border-gray-200 text-gray-800 rounded-bl-none"
                 }`}
               >
                 {!isMe && (
-                  <div className="font-semibold text-gray-600 mb-1">{from}</div>
+                  <div className="font-semibold text-gray-600 text-xs mb-1">
+                    {from}
+                  </div>
                 )}
                 <div>{textVal}</div>
-                <div className="text-xs text-gray-400 mt-1 text-right">
+                <div
+                  className={`text-[10px] mt-1 ${
+                    isMe ? "text-blue-100" : "text-gray-400"
+                  } text-right`}
+                >
                   {displayTime}
                 </div>
+                {m._failed && (
+                  <div className="absolute -bottom-4 right-2 text-[10px] text-red-500">
+                    ✖ Failed to send
+                  </div>
+                )}
               </div>
             </div>
           );
         })}
       </div>
-      <div className="flex gap-2 items-center">
-        <input
-          className="flex-1 border border-gray-300 rounded-full px-4 py-2 outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") send();
-          }}
-          placeholder="Type a message..."
-        />
-        <button
-          onClick={send}
-          className="p-2 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition"
-        >
-          <IoMdSend size={20} />
-        </button>
+
+      {/* Input */}
+      <div className="p-3 border-t border-gray-200 bg-white rounded-b-2xl">
+        <div className="flex items-center gap-2">
+          <input
+            type="text"
+            value={text}
+            onChange={(e) => setText(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && send()}
+            placeholder="Type a message..."
+            className="flex-1 bg-gray-50 border border-gray-300 rounded-full px-4 py-2 text-sm outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-400 transition"
+          />
+          <button
+            onClick={send}
+            className="p-2.5 bg-blue-600 text-white rounded-full hover:bg-blue-700 shadow-sm transition"
+          >
+            <IoMdSend size={18} />
+          </button>
+        </div>
       </div>
     </div>
   );

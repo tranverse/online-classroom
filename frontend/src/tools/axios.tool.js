@@ -1,4 +1,5 @@
 import axios from "axios";
+import authMemory from "@services/authMemory";
 
 export const axiosInstance = axios.create({
   baseURL: import.meta.env.VITE_SERVER_URL,
@@ -12,15 +13,8 @@ export const axiosInstance = axios.create({
 axiosInstance.interceptors.request.use(
   (config) => {
     // support both storing token directly under 'token' or inside a saved 'user' object
-    let token = localStorage.getItem("token");
-    if (!token) {
-      try {
-        const user = JSON.parse(localStorage.getItem("user") || "null");
-        if (user && user.token) token = user.token;
-      } catch (e) {
-        // ignore
-      }
-    }
+    // Prefer in-memory token; do not persist auth in localStorage
+    let token = authMemory.getToken();
     if (token) {
       config.headers["Authorization"] = `Bearer ${token}`;
     }

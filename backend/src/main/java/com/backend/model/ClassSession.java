@@ -59,6 +59,7 @@ public class ClassSession {
     ClassSessionStatus sessionStatus;
 
     @OneToMany(mappedBy = "classSession")
+    @com.fasterxml.jackson.annotation.JsonManagedReference(value = "classsession_attendance")
     List<Attendance> attendances;
 
 

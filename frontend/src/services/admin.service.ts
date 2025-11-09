@@ -31,9 +31,36 @@ export const AdminService = {
     page = 1,
     pageSize = 10
   ): Promise<PaginatedResponse<User>> => {
-    const resp = await axios.get(`${USER_URL}`, { params: { page, pageSize } });
-    // ApiResponse wrapper -> resp.data.data contains { data, total, page, pageSize }
-    return resp.data?.data;
+    try {
+      const resp = await axios.get(`${USER_URL}`, {
+        params: { page, pageSize },
+      });
+      console.log("resp", resp)
+      // backend commonly wraps responses as { code, message, data } where data
+      // may itself be the paginated object. Support both shapes and fall back
+      // to a safe empty paginated response.
+      const maybeWrapped = resp?.data?.data;
+      const maybeDirect = resp?.data;
+      const result = maybeWrapped ||
+        maybeDirect || {
+          data: [],
+          total: 0,
+          page,
+          pageSize,
+        };
+      return result;
+    } catch (e) {
+      // network or auth error - return a safe empty paginated response so callers
+      // don't attempt to read properties of undefined.
+      // eslint-disable-next-line no-console
+      console.error("AdminService.getUsers failed", e);
+      return {
+        data: [],
+        total: 0,
+        page,
+        pageSize,
+      };
+    }
   },
 
   createUser: async (user: Omit<User, "id" | "createdAt">): Promise<User> => {

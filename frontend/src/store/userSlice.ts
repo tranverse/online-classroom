@@ -1,5 +1,6 @@
 import { createAsyncThunk, createSlice, PayloadAction } from "@reduxjs/toolkit";
 import AuthService from "@services/auth.service";
+import authMemory from "@services/authMemory";
 
 export interface User {
   id: string;
@@ -13,11 +14,27 @@ export interface UserState {
   user: User | null;
 }
 
-// Load user từ localStorage khi app khởi tạo
-const persistedUser = localStorage.getItem("user");
-const initialState: UserState = {
-  user: persistedUser ? JSON.parse(persistedUser) : null,
-};
+// Load persisted user from localStorage so login survives refresh.
+const persistedUser = (() => {
+  try {
+    return JSON.parse(localStorage.getItem("user") || "null");
+  } catch (e) {
+    return null;
+  }
+})();
+const persistedToken = localStorage.getItem("token");
+if (persistedUser) {
+  // hydrate in-memory auth store from persisted values
+  try {
+    authMemory.setUser(persistedUser);
+  } catch (e) {}
+}
+if (persistedToken) {
+  try {
+    authMemory.setToken(persistedToken);
+  } catch (e) {}
+}
+const initialState: UserState = { user: persistedUser || null };
 
 // Async thunk để login
 export const loginUser = createAsyncThunk<
@@ -38,16 +55,21 @@ export const loginUser = createAsyncThunk<
       if (token) {
         try {
           payload.token = token;
-        } catch (e) {
-          // ignore
-        }
-        localStorage.setItem("token", token);
+        } catch (e) {}
+        // persist token and user in localStorage so login survives refresh
+        try {
+          localStorage.setItem("token", token);
+        } catch (e) {}
+        authMemory.setToken(token);
       }
       if (!payload || !payload.id) {
         return rejectWithValue(response.message || "Invalid login response");
       }
-      // Persist user object (with token included when present)
-      localStorage.setItem("user", JSON.stringify(payload));
+      // Persist user and also store in-memory
+      try {
+        localStorage.setItem("user", JSON.stringify(payload));
+      } catch (e) {}
+      authMemory.setUser(payload);
       return payload as User;
     }
     return rejectWithValue(response?.message || "Login failed");
@@ -64,12 +86,16 @@ const userSlice = createSlice({
   reducers: {
     logout: (state) => {
       state.user = null;
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
+      // clear both in-memory and persisted auth
+      try {
+        localStorage.removeItem("user");
+        localStorage.removeItem("token");
+      } catch (e) {}
+      authMemory.clear();
     },
     setUser: (state, action: PayloadAction<User>) => {
       state.user = action.payload;
-      localStorage.setItem("user", JSON.stringify(action.payload));
+      authMemory.setUser(action.payload);
     },
   },
   extraReducers: (builder) => {
@@ -81,8 +107,7 @@ const userSlice = createSlice({
     );
     builder.addCase(loginUser.rejected, (state) => {
       state.user = null;
-      localStorage.removeItem("user");
-      localStorage.removeItem("token");
+      authMemory.clear();
     });
   },
 });

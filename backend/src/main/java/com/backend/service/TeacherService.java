@@ -58,6 +58,11 @@ public class TeacherService {
     }
 
     @Transactional(readOnly = true)
+    public List<Classroom> getTeacherClassesByTeacherId(String teacherId) {
+        return classroomRepository.findAllByTeacherId(teacherId);
+    }
+
+    @Transactional(readOnly = true)
     public List<User> getClassStudents(String classId) {
         validateTeacherClassAccess(classId);
         return userRepository.findAllStudentsByClassId(classId);

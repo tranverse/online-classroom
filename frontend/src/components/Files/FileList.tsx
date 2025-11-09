@@ -3,7 +3,7 @@ import { Folder, FileText, Download } from "lucide-react";
 import FilesService from "@services/files.service";
 
 type FolderType = { id: string; name: string };
-type FileType = { id: string; name: string; size?: number };
+type FileType = { id: string; name: string; size?: number; folderId: string };
 
 const FileList: React.FC<{
   folders?: FolderType[];
@@ -129,43 +129,46 @@ const FileList: React.FC<{
       <div>
         <h3 className="text-lg font-medium mb-2">Files</h3>
         <div className="space-y-2">
-          {files.map((f) => (
-            <div
-              key={f.id}
-              onClick={() => preview(f)}
-              role="button"
-              tabIndex={0}
-              className="flex items-center justify-between gap-3 p-3 bg-white rounded-md shadow-sm border hover:bg-slate-50 cursor-pointer"
-            >
-              <div className="flex items-center gap-3">
-                <FileText className="w-6 h-6 text-amber-500" />
-                <div>
-                  <div className="font-medium">{f.name}</div>
-                  <div className="text-sm text-slate-500">{f.size ?? "-"}</div>
+          {files
+            .map((f) => (
+              <div
+                key={f.id}
+                onClick={() => preview(f)}
+                role="button"
+                tabIndex={0}
+                className="flex items-center justify-between gap-3 p-3 bg-white rounded-md shadow-sm border hover:bg-slate-50 cursor-pointer"
+              >
+                <div className="flex items-center gap-3">
+                  <FileText className="w-6 h-6 text-amber-500" />
+                  <div>
+                    <div className="font-medium">{f.name}</div>
+                    <div className="text-sm text-slate-500">
+                      {f.size ?? "-"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      download(f);
+                    }}
+                    className="text-slate-600 hover:text-slate-800"
+                  >
+                    <Download className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      deleteFile(f);
+                    }}
+                    className="text-red-600 hover:text-red-800 px-2"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    download(f);
-                  }}
-                  className="text-slate-600 hover:text-slate-800"
-                >
-                  <Download className="w-4 h-4" />
-                </button>
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    deleteFile(f);
-                  }}
-                  className="text-red-600 hover:text-red-800 px-2"
-                >
-                  Delete
-                </button>
-              </div>
-            </div>
-          ))}
+            ))}
           {files.length === 0 && (
             <div className="text-sm text-slate-500">No files</div>
           )}

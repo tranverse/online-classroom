@@ -262,6 +262,9 @@ export const UsersPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [roleFilter, setRoleFilter] = useState<"ALL" | "TEACHER" | "STUDENT">(
+    "ALL"
+  );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [toast, setToast] = useState<{
@@ -273,9 +276,32 @@ export const UsersPage: React.FC = () => {
   const fetchUsers = async () => {
     setLoading(true);
     try {
-      const response = await AdminService.getUsers(page, pageSize);
-      setUsers(response.data);
-      setTotal(response.total);
+      // If filtering by role, fetch a larger page so we can filter client-side
+      // (backend currently doesn't accept a role filter). For normal "ALL" view
+      // use regular pagination.
+      if (roleFilter !== "ALL") {
+        // get a larger page so we can show all teachers or students
+        const resp = await AdminService.getUsers(1, 200);
+        console.log("resp", resp);
+        const paginated = resp || {
+          data: [],
+          total: 0,
+          page: 1,
+          pageSize: 200,
+        };
+        const all = paginated.data || [];
+        const filtered = all.filter(
+          (u) => u.role === (roleFilter === "TEACHER" ? "TEACHER" : "STUDENT")
+        );
+        setUsers(filtered);
+        setTotal(filtered.length);
+        setPage(1);
+      } else {
+        const response = await AdminService.getUsers(page, pageSize);
+        const paginated = response || { data: [], total: 0, page, pageSize };
+        setUsers(paginated.data || []);
+        setTotal(typeof paginated.total === "number" ? paginated.total : 0);
+      }
     } catch (error) {
       console.error("Failed to fetch users:", error);
     } finally {
@@ -286,6 +312,23 @@ export const UsersPage: React.FC = () => {
   useEffect(() => {
     fetchUsers();
   }, [page]);
+
+  // re-fetch when role filter changes
+  useEffect(() => {
+    // reset to first page and fetch
+    // setting the page to 1 will trigger the page effect which calls fetchUsers.
+    // This avoids overlapping fetches and keeps pagination consistent.
+    // If we're already on page 1, setPage(1) won't change state and the page effect
+    // won't run; in that case call fetchUsers directly. If we're on a different
+    // page, setPage(1) will update state and the page effect will trigger fetch.
+    if (page === 1) {
+      setPage(1); // keep explicit reset for clarity
+      fetchUsers();
+    } else {
+      setPage(1);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [roleFilter]);
 
   const handleCreateUser = async (data: UserFormData) => {
     try {
@@ -327,23 +370,7 @@ export const UsersPage: React.FC = () => {
     { key: "name", title: "Name" },
     { key: "email", title: "Email" },
     { key: "role", title: "Role" },
-    {
-      key: "status",
-      title: "Status",
-      render: (user: User) => (
-        <span
-          className={`px-2 py-1 rounded-full text-xs ${
-            user.status === "ACTIVE"
-              ? "bg-green-100 text-green-800"
-              : user.status === "BLOCKED"
-              ? "bg-red-100 text-red-800"
-              : "bg-gray-100 text-gray-800"
-          }`}
-        >
-          {user.status}
-        </span>
-      ),
-    },
+
     {
       key: "actions",
       title: "Actions",
@@ -382,6 +409,25 @@ export const UsersPage: React.FC = () => {
         >
           Add User
         </button>
+      </div>
+      {/* Role filter tabs */}
+      <div className="mb-4">
+        <div className="inline-flex rounded-md shadow-sm" role="tablist">
+          {(["ALL", "TEACHER", "STUDENT"] as const).map((r) => (
+            <button
+              key={r}
+              role="tab"
+              onClick={() => setRoleFilter(r)}
+              className={`px-4 py-2 border border-gray-200 rounded-l-md first:rounded-l-md last:rounded-r-md text-sm font-medium focus:outline-none ${
+                roleFilter === r
+                  ? "bg-blue-600 text-white"
+                  : "bg-white text-gray-700"
+              }`}
+            >
+              {r === "ALL" ? "All" : r === "TEACHER" ? "Teachers" : "Students"}
+            </button>
+          ))}
+        </div>
       </div>
 
       <DataTable

@@ -3,6 +3,7 @@ import axios from "@tools/axios.tool";
 import { useParams } from "react-router-dom";
 import AttendanceCapture from "./components/AttendanceCapture";
 import ClassSession from "./index";
+import authMemory from "@services/authMemory";
 
 const ClassSessionEntry: React.FC = () => {
   const { id } = useParams();
@@ -30,15 +31,8 @@ const ClassSessionEntry: React.FC = () => {
   if (!id) return <div>Missing class session id</div>;
 
   // If current user is a teacher (or instructor-like), skip attendance UI entirely.
-  const roleFromStorage = (localStorage.getItem("role") || "").toLowerCase();
-  const userRaw = localStorage.getItem("user");
-  const parseUser = (() => {
-    try {
-      return userRaw ? JSON.parse(userRaw) : null;
-    } catch (e) {
-      return null;
-    }
-  })();
+  const roleFromStorage = (authMemory.getUser()?.role || "").toLowerCase();
+  const parseUser = authMemory.getUser() || null;
 
   const isTeacherRole = (r: any) => {
     if (!r) return false;
@@ -83,7 +77,7 @@ const ClassSessionEntry: React.FC = () => {
         </h2>
         <AttendanceCapture
           classSessionId={id}
-          userId={localStorage.getItem("userId") || undefined}
+          userId={authMemory.getUser()?.id || undefined}
           apiUrl={getApiBase()}
           onSuccess={(info) => {
             // mark attended immediately when backend reports success
