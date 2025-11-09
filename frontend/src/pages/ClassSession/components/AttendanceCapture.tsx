@@ -26,6 +26,12 @@ const AttendanceCapture: React.FC<Props> = ({
   const [suggestions, setSuggestions] = useState<
     Array<{ text: string; hint?: string }>
   >([]);
+  const [detectionStatus, setDetectionStatus] = useState<
+    "idle" | "running" | "success" | "failed"
+  >("idle");
+  const [livenessStatus, setLivenessStatus] = useState<
+    "idle" | "running" | "success" | "failed"
+  >("idle");
   const toast = useToast();
   // refs for debouncing motion detection
   const motionCountRef = useRef(0);
@@ -153,6 +159,10 @@ const AttendanceCapture: React.FC<Props> = ({
     if (!videoRef.current || !canvasRef.current) return;
     setCapturing(true);
     capturingRef.current = true;
+    // reset phase UI
+    setDetectionStatus("running");
+    setLivenessStatus("idle");
+    setLivenessFailed(false);
     const video = videoRef.current;
     const canvas = canvasRef.current;
     const ctx = canvas.getContext("2d", { willReadFrequently: true });
@@ -173,23 +183,166 @@ const AttendanceCapture: React.FC<Props> = ({
             userId ? "?userId=" + userId : ""
           }`;
 
-      // axios instance will attach Authorization header via interceptor
+      // Step A: call face-service /analyze to show detection + liveness phases
+      const faceServiceBase = "http://localhost:5001"
+      // Normalize common dev host 0.0.0.0 -> localhost because browsers cannot connect to 0.0.0.0
+      const normalizeHost = (u: string) => {
+        if (!u) return u;
+        try {
+          // replace host 0.0.0.0 with localhost, preserve scheme and port
+          return u.replace(/:\/\/0\.0\.0\.0(\:?\d*)/, "://localhost$1");
+        } catch (e) {
+          return u;
+        }
+      };
+      const faceServiceBaseNormalized = normalizeHost(faceServiceBase);
+      // prefer a dedicated face service path if configured, otherwise fall back to API server analyze proxy
+      const analyzeEndpoint = faceServiceBaseNormalized
+        ? `${faceServiceBaseNormalized}/analyze`
+        : `/analyze`;
+
+      setDetectionStatus("running");
+      setLivenessStatus("running");
+
+      let analyzeResp: any = null;
+      try {
+        const a = await axios.post(analyzeEndpoint, {
+          imageBase64: dataUrl.split(",")[1],
+          wantDescriptor: true,
+        });
+        analyzeResp = a?.data || null;
+      } catch (e: any) {
+        console.error("Analyze call failed", e);
+        // if dev server returned 404 for /analyze (no proxy), try the face-service default host
+        const isNotFound =
+          e?.response?.status === 404 ||
+          String(e?.message || "").includes("404");
+        if (!faceServiceBase && isNotFound) {
+          try {
+            const fallback = "http://0.0.0.0:5001/analyze";
+            const b = await axios.post(fallback, {
+              imageBase64: dataUrl.split(",")[1],
+              wantDescriptor: true,
+            });
+            analyzeResp = b?.data || null;
+          } catch (ee) {
+            console.error("Fallback analyze (localhost:5001) failed", ee);
+            analyzeResp = null;
+          }
+        } else {
+          analyzeResp = null;
+        }
+      }
+
+      if (!analyzeResp) {
+        setDetectionStatus("failed");
+        setLivenessStatus("failed");
+        setMessage("Face analysis failed (no response)");
+        setCapturing(false);
+        capturingRef.current = false;
+        return;
+      }
+      console.log("analyzeResp", analyzeResp)
+      // update UI based on analyze response
+      const det = analyzeResp.detection || {};
+      const liv = analyzeResp.liveness || {};
+      setDetectionStatus(det.ok ? "success" : "failed");
+      setLivenessStatus(liv.ok ? "success" : "failed");
+
+      // if either phase failed, show details and abort attendance record
+      if (!det.ok || !liv.ok) {
+        setMessage(
+          `Analysis: detection=${det.ok ? "ok" : "fail"}; liveness=${
+            liv.ok ? "ok" : "fail"
+          }`
+        );
+        // expose liveness debug
+        setLivenessDetails(
+          `score=${liv.score ?? "-"}; lbp=${liv.lbp ?? "-"}; blink=${
+            liv.blink ?? "-"
+          }`
+        );
+        setCapturing(false);
+        capturingRef.current = false;
+        return;
+      }
+
+      // Step B: both phases passed -> proceed to record attendance via existing API endpoint
       const resp = await axios.post(endpoint, {
         imageBase64: dataUrl.split(",")[1],
+        analyzeMetrics: analyzeResp,
       });
       const json = resp?.data;
 
       if (!json) {
+        setDetectionStatus("failed");
+        setLivenessStatus("failed");
         setMessage("No response data from server");
       } else if (json && json.data) {
         try {
           const info = json.data;
+          console.log("info", info)
+          // try to extract analysis metrics (backend may return object or note string)
+          let analyzeMap: Record<string, any> = {};
+          try {
+            if (
+              info.analyzeMetrics &&
+              typeof info.analyzeMetrics === "object"
+            ) {
+              analyzeMap = info.analyzeMetrics;
+            } else if (info.note && typeof info.note === "string") {
+              // parse note into map (reuse existing parsing logic)
+              const note = String(info.note || "");
+              const normalized = note
+                .replace(/[,|]/g, ";")
+                .replace(/\s+/g, " ");
+              const parts = normalized
+                .split(";")
+                .map((s) => s.trim())
+                .filter(Boolean);
+              parts.forEach((p: string) => {
+                const re = /([a-zA-Z0-9_]+)=([^;]+)/g;
+                let m: RegExpExecArray | null;
+                while ((m = re.exec(p)) !== null) {
+                  const k = m[1];
+                  let v: any = m[2] || "";
+                  v = v.trim();
+                  analyzeMap[k] = v;
+                }
+              });
+            }
+          } catch (e) {
+            // ignore parse failures
+          }
+          console.log("analyzeMap", analyzeMap)
+          // determine detection status
+          const descLenRaw =
+            analyzeMap["descriptor_len"] ??
+            analyzeMap["descriptorLen"] ??
+            info.descriptor_len ??
+            info.descriptorLen;
+          const descLen =
+            typeof descLenRaw === "string" ? Number(descLenRaw) : descLenRaw;
+          const detectionOk = descLen && Number(descLen) > 0;
+          setDetectionStatus(detectionOk ? "success" : "failed");
+
+          // determine liveness status
+          const status = String(info.status || "").toUpperCase();
+          const livenessFlag =
+            analyzeMap["liveness"] ??
+            analyzeMap["isLive"] ??
+            analyzeMap["live"];
+          const livenessFailedNow =
+            status === "FAKE_DETECTED" ||
+            livenessFlag === "false" ||
+            livenessFlag === false;
+          setLivenessStatus(livenessFailedNow ? "failed" : "success");
+
           // user-friendly messages
           if (info.isPassed || info.status === "PRESENT") {
             setLivenessFailed(false);
             setLivenessDetails(null);
             setMessage("Marked present — attendance recorded.");
-            // mark done and stop camera, then notify parent
             setDone(true);
             try {
               if (videoRef.current && videoRef.current.srcObject) {
@@ -381,6 +534,38 @@ const AttendanceCapture: React.FC<Props> = ({
           autoPlay
           muted
         />
+
+        {/* Phase badges: detection + liveness */}
+        <div className="absolute top-3 left-3 flex gap-2 z-20">
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/50 text-white text-xs">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                detectionStatus === "running"
+                  ? "bg-yellow-400"
+                  : detectionStatus === "success"
+                  ? "bg-green-400"
+                  : detectionStatus === "failed"
+                  ? "bg-red-500"
+                  : "bg-gray-400"
+              }`}
+            ></span>
+            <span>Detection</span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-black/50 text-white text-xs">
+            <span
+              className={`w-2 h-2 rounded-full ${
+                livenessStatus === "running"
+                  ? "bg-yellow-400"
+                  : livenessStatus === "success"
+                  ? "bg-green-400"
+                  : livenessStatus === "failed"
+                  ? "bg-red-500"
+                  : "bg-gray-400"
+              }`}
+            ></span>
+            <span>Anti-spoof</span>
+          </div>
+        </div>
 
         {/* Overlay mờ xung quanh, chừa giữa tròn vừa phải */}
         <div className="absolute inset-0 flex items-center justify-center">

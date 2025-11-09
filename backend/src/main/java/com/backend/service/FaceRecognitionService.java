@@ -33,6 +33,9 @@ public class FaceRecognitionService {
     @Value("${app.face.similarity.threshold:0.6}")
     private double similarityThreshold;
 
+    @Value("${app.face.liveness.threshold:0.5}")
+    private double livenessThreshold;
+
     @Value("${EMBEDDING_ENCRYPTION_KEY:}")
     private String encryptionKeyBase64;
 
@@ -45,6 +48,11 @@ public class FaceRecognitionService {
     // expose similarity threshold for other components
     public double getSimilarityThreshold() {
         return similarityThreshold;
+    }
+
+    // expose liveness threshold for other components
+    public double getLivenessThreshold() {
+        return livenessThreshold;
     }
 
     public Map<String, Object> randomChallenge() {
@@ -126,8 +134,47 @@ public class FaceRecognitionService {
     public java.util.List<Double> extractDescriptor(String imageBase64OrJson) {
         if (imageBase64OrJson == null) return java.util.Collections.emptyList();
         String s = imageBase64OrJson.trim();
+        // Heuristic: if the input is long or contains typical base64 markers, treat as image
+        boolean looksLikeBase64Image = s.length() > 200 || s.contains("/9j/") || s.contains("data:image");
 
-        // If string looks like a JSON array already, parse it locally
+        // If it looks like an image, call external AI extractor immediately
+        if (looksLikeBase64Image) {
+            try {
+                String aiUrl = System.getenv().getOrDefault("AI_SERVICE_URL", "http://localhost:5001/extract");
+                RestTemplate rt = new RestTemplate();
+                HttpHeaders headers = new HttpHeaders();
+                headers.setContentType(MediaType.APPLICATION_JSON);
+                java.util.Map<String, String> payload = java.util.Map.of("imageBase64", s);
+                HttpEntity<java.util.Map<String, String>> req = new HttpEntity<>(payload, headers);
+                ResponseEntity<String> resp = rt.postForEntity(aiUrl, req, String.class);
+                if (resp.getStatusCode().is2xxSuccessful() && resp.getBody() != null) {
+                    log.info("AI service response body: {}", resp.getBody());
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,Object>> tr = new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String,Object>>(){};
+                    java.util.Map<String,Object> m = mapper.readValue(resp.getBody(), tr);
+                    Object descObj = m.get("descriptor");
+                    if (descObj != null) {
+                        java.util.List<Double> descriptor = mapper.convertValue(descObj, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
+                        if (descriptor != null) {
+                            log.info("Parsed descriptor length from AI: {}", descriptor.size());
+                            if (descriptor.size() == 512) {
+                                log.info("Trimming descriptor from 512 -> 128 for backward compatibility");
+                                descriptor = descriptor.subList(0, 128);
+                            } else if (descriptor.size() != 128) {
+                                log.warn("Descriptor length unexpected ({}). Expected 128 or 512.", descriptor.size());
+                            }
+                        }
+                        return descriptor;
+                    }
+                }
+            } catch (Exception ex) {
+                log.warn("AI extract failed", ex);
+            }
+            // if AI extraction failed, fallthrough to legacy parsing attempts
+        }
+
+        // If we reach here, the input did not look like a base64 image (or AI extraction failed)
+        // Try parsing a raw JSON array (legacy client behavior)
         if (s.startsWith("[")) {
             try {
                 double[] arr = fromJson(s);
@@ -135,28 +182,24 @@ public class FaceRecognitionService {
                 for (double v : arr) out.add(v);
                 return out;
             } catch (Exception ex) {
-                // fallthrough to attempt AI service extraction
+                // fallthrough to attempt base64-decoded JSON
             }
         }
 
-        // Heuristic: if the input is long or contains typical base64 headers, treat as image
-        boolean looksLikeBase64Image = s.length() > 200 || s.contains("/9j/") || s.contains("data:image");
-        if (!looksLikeBase64Image) {
-            // maybe it is base64-encoded JSON array (legacy clients). Try decode once.
-            try {
-                if (s.matches("^[A-Za-z0-9+/=\\r\\n]+$")) {
-                    byte[] decoded = Base64.getDecoder().decode(s);
-                    String dec = new String(decoded, StandardCharsets.UTF_8).trim();
-                    if (dec.startsWith("[")) {
-                        double[] arr = fromJson(dec);
-                        java.util.List<Double> out = new java.util.ArrayList<>(arr.length);
-                        for (double v : arr) out.add(v);
-                        return out;
-                    }
+        // maybe it is base64-encoded JSON array (legacy clients). Try decode once.
+        try {
+            if (s.matches("^[A-Za-z0-9+/=\\r\\n]+$")) {
+                byte[] decoded = Base64.getDecoder().decode(s);
+                String dec = new String(decoded, StandardCharsets.UTF_8).trim();
+                if (dec.startsWith("[")) {
+                    double[] arr = fromJson(dec);
+                    java.util.List<Double> out = new java.util.ArrayList<>(arr.length);
+                    for (double v : arr) out.add(v);
+                    return out;
                 }
-            } catch (Exception ex) {
-                // ignore and continue to AI extraction
             }
+        } catch (Exception ex) {
+            // ignore and return empty
         }
 
         // Fallback: call external AI service /extract to obtain real embeddings
@@ -175,14 +218,22 @@ public class FaceRecognitionService {
                 java.util.Map<String,Object> m = mapper.readValue(resp.getBody(), tr);
                 Object descObj = m.get("descriptor");
                 if (descObj != null) {
+// Sau khi lấy descriptor từ AI service
                     java.util.List<Double> descriptor = mapper.convertValue(descObj, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
                     if (descriptor != null) {
                         log.info("Parsed descriptor length from AI: {}", descriptor.size());
-                        if (descriptor.size() != 128) {
-                            log.warn("Descriptor length unexpected ({}). Expected 128. AI response may be malformed.", descriptor.size());
+
+                        // If AI returns 512-d descriptors but the rest of the system expects 128-d,
+                        // trim to the first 128 elements for backward compatibility.
+                        if (descriptor.size() == 512) {
+                            log.info("Trimming descriptor from 512 -> 128 for backward compatibility");
+                            descriptor = descriptor.subList(0, 128);
+                        } else if (descriptor.size() != 128) {
+                            log.warn("Descriptor length unexpected ({}). Expected 128 or 512.", descriptor.size());
                         }
                     }
                     return descriptor;
+
                 }
             }
         } catch (Exception ex) {

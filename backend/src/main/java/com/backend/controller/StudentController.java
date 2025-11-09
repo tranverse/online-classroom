@@ -1,8 +1,6 @@
 package com.backend.controller;
 
-import java.util.Base64;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.*;
 
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -55,62 +53,135 @@ public class StudentController {
     StudentClassroomRepository studentClassroomRepository;
     ClassroomMapper classroomMapper;
 
-    // new: enroll descriptor endpoint
     @PostMapping(value = "/face/enroll", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('STUDENT')")
     public ResponseEntity<ApiResponse<?>> enrollFace(@RequestPart("photo") MultipartFile photo) {
         try {
             String email = SecurityContextHolder.getContext().getAuthentication().getName();
             User user = userRepository.findByEmail(email).orElse(null);
-            if (user == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.builder().success(false).message("User not found").build());
+            if (user == null) {
+                log.warn("User not found for email {}", email);
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(ApiResponse.builder().success(false).message("User not found").build());
+            }
 
+            // Convert image to Base64
             byte[] bytes = photo.getBytes();
             String base64 = Base64.getEncoder().encodeToString(bytes);
 
-            // Save raw face image for debugging/enrollment convenience
+            // Save raw face image for debugging
             try {
                 user.setFaceData(base64);
                 userRepository.save(user);
-                log.info("Saved faceData for user {} (enroll endpoint)", user.getId());
+                log.info("Saved raw faceData for user {}", user.getId());
             } catch (Exception ex) {
-                log.warn("Failed to save faceData on enroll for user {}", user.getId(), ex);
+                log.warn("Failed to save faceData for user {}", user.getId(), ex);
             }
 
-            // call ai_service to get descriptor
+            // Call AI service
             RestTemplate rt = new RestTemplate();
-            String aiUrl = "http://localhost:5001/extract"; // ai_service should implement /extract returning descriptor
+            String aiUrl = "http://localhost:5001/extract";
             Map<String, String> payload = new HashMap<>();
             payload.put("imageBase64", base64);
             HttpHeaders headers = new HttpHeaders();
             headers.setContentType(MediaType.APPLICATION_JSON);
             HttpEntity<Map<String, String>> request = new HttpEntity<>(payload, headers);
-            ResponseEntity<String> aiResp = rt.postForEntity(aiUrl, request, String.class);
+
+            ResponseEntity<String> aiResp;
+            try {
+                aiResp = rt.postForEntity(aiUrl, request, String.class);
+            } catch (Exception ex) {
+                log.error("AI service call failed", ex);
+                return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                        .body(ApiResponse.builder().success(false).message("AI service unavailable").build());
+            }
+
+            log.info("AI /extract status={} body={}", aiResp.getStatusCodeValue(), aiResp.getBody());
 
             Map<String, Object> result = new HashMap<>();
             if (aiResp.getStatusCode().is2xxSuccessful() && aiResp.getBody() != null) {
-                com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-                com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>> tr = new com.fasterxml.jackson.core.type.TypeReference<java.util.Map<String, Object>>(){};
-                Map<String, Object> m = mapper.readValue(aiResp.getBody(), tr);
-                result.putAll(m);
+                try {
+                    com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+                    result = mapper.readValue(aiResp.getBody(), new com.fasterxml.jackson.core.type.TypeReference<>() {});
+                } catch (Exception ex) {
+                    log.error("Failed to parse AI response JSON", ex);
+                    return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                            .body(ApiResponse.builder().success(false).message("AI response parse failed").build());
+                }
             }
 
-            // get descriptor from result
+            // AI responses may have different shapes:
+            // - { "descriptor": [...] }
+            // - { "faces": [ { "descriptor": [...] }, ... ] }
             Object descObj = result.get("descriptor");
-            if (descObj == null) {
-                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.builder().success(false).message("AI service didn't return descriptor").build());
+            if (descObj == null && result.get("faces") != null) {
+                try {
+                    Object facesObj = result.get("faces");
+                    if (facesObj instanceof java.util.List) {
+                        java.util.List<?> facesList = (java.util.List<?>) facesObj;
+                        if (!facesList.isEmpty() && facesList.get(0) instanceof java.util.Map) {
+                            @SuppressWarnings("unchecked")
+                            java.util.Map<String, Object> firstFace = (java.util.Map<String, Object>) facesList.get(0);
+                            descObj = firstFace.get("descriptor");
+                            log.debug("Found nested descriptor under faces[0] in AI response");
+                        }
+                    }
+                } catch (Exception ex) {
+                    log.warn("Failed to extract nested descriptor from AI response", ex);
+                }
             }
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            java.util.List<Double> descriptor = mapper.convertValue(descObj, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
 
-            // save descriptor using StudentFaceService
-            studentFaceService.enrollDescriptor(user.getId(), descriptor);
+            if (descObj == null) {
+                log.warn("Descriptor is null, possibly no face detected. AI response: {}", result);
+                // Return 200 with structured ApiResponse so frontend can show a friendly message
+                return ResponseEntity.ok(ApiResponse.builder()
+                        .success(false)
+                        .code("no_face_detected")
+                        .message("No face detected in the provided photo. Please retry with better lighting or try a different angle.")
+                        .data(result)
+                        .build());
+            }
 
-            return ResponseEntity.ok(ApiResponse.builder().message("Enrolled").data(result).build());
-        } catch (java.io.IOException | org.springframework.web.client.RestClientException ex) {
-            log.error("Enroll failed", ex);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.builder().success(false).message("Enroll failed").build());
+            // Convert descriptor safely
+            List<Double> descriptor;
+            try {
+                descriptor = convertToDoubleList(descObj);
+            } catch (Exception ex) {
+                log.error("Failed to convert descriptor", ex);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(ApiResponse.builder().success(false).message("Descriptor conversion failed").build());
+            }
+
+            if (descriptor.isEmpty()) {
+                log.warn("Descriptor empty for user {}", user.getId());
+                return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                        .body(ApiResponse.builder().success(false).message("Descriptor empty").build());
+            }
+
+            // Trim 512-dim descriptor to 128 for backward compatibility
+            if (descriptor.size() == 512) {
+                log.info("Trimming descriptor 512->128 for user {}", user.getId());
+                descriptor = new ArrayList<>(descriptor.subList(0, 128));
+            }
+
+            // Save descriptor
+            try {
+                studentFaceService.enrollDescriptor(user.getId(), descriptor);
+            } catch (Exception ex) {
+                log.error("Failed to enroll descriptor for user {}", user.getId(), ex);
+                return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                        .body(ApiResponse.builder().success(false).message("Enroll failed: " + ex.getMessage()).build());
+            }
+
+            return ResponseEntity.ok(ApiResponse.builder().success(true).message("Enrolled successfully").data(result).build());
+
+        } catch (Exception ex) {
+            log.error("Unexpected error during enroll", ex);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.builder().success(false).message("Enroll failed: " + ex.getMessage()).build());
         }
     }
+
 
     // GET /api/student/classrooms
     @GetMapping("/classrooms")
@@ -539,6 +610,62 @@ public class StudentController {
         } catch (Exception ex) {
             log.error("Failed to fetch descriptors", ex);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<Map<String,Object>>builder().success(false).message("Failed").build());
+        }
+    }
+
+    // Helper to convert various descriptor shapes into List<Double>
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    private java.util.List<Double> convertToDoubleList(Object descObj) throws Exception {
+        if (descObj == null) return null;
+        // If already a List of Number
+        if (descObj instanceof java.util.List) {
+            java.util.List list = (java.util.List) descObj;
+            java.util.List<Double> out = new java.util.ArrayList<>();
+            for (Object o : list) {
+                if (o == null) continue;
+                if (o instanceof Number) out.add(((Number) o).doubleValue());
+                else {
+                    // try parse as double from string
+                    out.add(Double.parseDouble(String.valueOf(o)));
+                }
+            }
+            return out;
+        }
+        // If it's a JSON string like "[0.1,0.2,...]"
+        if (descObj instanceof String) {
+            String s = (String) descObj;
+            s = s.trim();
+            if (s.startsWith("[")) {
+                com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+                return m.readValue(s, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
+            }
+            // fallback: try comma separated
+            String[] parts = s.split(",");
+            java.util.List<Double> out = new java.util.ArrayList<>();
+            for (String p : parts) {
+                if (p == null || p.isBlank()) continue;
+                out.add(Double.parseDouble(p.trim()));
+            }
+            return out;
+        }
+        // If it's an array (e.g., double[]), attempt conversion
+        if (descObj.getClass().isArray()) {
+            int len = java.lang.reflect.Array.getLength(descObj);
+            java.util.List<Double> out = new java.util.ArrayList<>();
+            for (int i = 0; i < len; i++) {
+                Object v = java.lang.reflect.Array.get(descObj, i);
+                if (v instanceof Number) out.add(((Number) v).doubleValue());
+                else out.add(Double.parseDouble(String.valueOf(v)));
+            }
+            return out;
+        }
+        // otherwise, try JSON parsing of object's toString
+        try {
+            com.fasterxml.jackson.databind.ObjectMapper m = new com.fasterxml.jackson.databind.ObjectMapper();
+            String s = descObj.toString();
+            return m.readValue(s, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
+        } catch (Exception ex) {
+            throw new Exception("Unsupported descriptor format: " + descObj.getClass().getName(), ex);
         }
     }
 

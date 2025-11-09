@@ -75,6 +75,22 @@ public class AttendanceService {
                 if (aiResp.getStatusCode().is2xxSuccessful() && aiResp.getBody() != null) {
                     Map<String, Object> m = mapper.readValue(aiResp.getBody(), new TypeReference<Map<String,Object>>(){});
                     Object descObj = m.get("descriptor");
+                    // support newer AI response shape { faces: [ { descriptor: [...] } ] }
+                    if (descObj == null && m.get("faces") != null) {
+                        try {
+                            Object facesObj = m.get("faces");
+                            if (facesObj instanceof java.util.List) {
+                                java.util.List<?> facesList = (java.util.List<?>) facesObj;
+                                if (!facesList.isEmpty() && facesList.get(0) instanceof java.util.Map) {
+                                    @SuppressWarnings("unchecked")
+                                    java.util.Map<String,Object> firstFace = (java.util.Map<String,Object>) facesList.get(0);
+                                    descObj = firstFace.get("descriptor");
+                                }
+                            }
+                        } catch (Exception ex) {
+                            // ignore nested extraction errors
+                        }
+                    }
                     if (descObj != null) {
                         descriptor = mapper.convertValue(descObj, new TypeReference<java.util.List<Double>>(){});
                         usedAIFallback = true;
@@ -188,19 +204,48 @@ public class AttendanceService {
             noteBuilder.append("minDistance=").append(String.valueOf(minDist)).append(";");
             // also include best similarity for easier debugging
             double sim = 1.0 - minDist;
-            noteBuilder.append("similarity=").append(String.valueOf(sim));
+            noteBuilder.append("similarity=").append(String.valueOf(sim)).append(";");
         }
 
         // perform liveness check if analyze metrics present
         boolean livenessPassed = true;
+//        if (analyzeMetrics != null) {
+//            try {
+//                // Prefer explicit numeric livenessScore returned by the AI analyze endpoint if present
+//                Object lsObj = analyzeMetrics.getOrDefault("livenessScore", analyzeMetrics.get("score"));
+//                if (lsObj instanceof Number) {
+//                    double ls = ((Number) lsObj).doubleValue();
+//                    livenessPassed = ls >= faceRecognitionService.getLivenessThreshold();
+//                    noteBuilder.append("liveness=").append(String.valueOf(livenessPassed)).append(";");
+//                    noteBuilder.append("livenessScore=").append(String.valueOf(ls)).append(";");
+//                } else {
+//                    // fallback to challengeMetrics + fakeDetector validation
+//                    Map<String,Object> lv = faceRecognitionService.validateLiveness((Map<String,Object>)analyzeMetrics.getOrDefault("challengeMetrics", analyzeMetrics));
+//                    livenessPassed = Boolean.TRUE.equals(lv.get("livenessPassed"));
+//                    noteBuilder.append("liveness=").append(String.valueOf(livenessPassed)).append(";");
+//                    if (lv.get("blinkProb") != null) noteBuilder.append("blinkProb=").append(String.valueOf(lv.get("blinkProb"))).append(";");
+//                    if (lv.get("yawDelta") != null) noteBuilder.append("yawDelta=").append(String.valueOf(lv.get("yawDelta"))).append(";");
+//                }
+//            } catch (Exception ex) {
+//                // ignore
+//            }
+//        }
         if (analyzeMetrics != null) {
             try {
-                Map<String,Object> lv = faceRecognitionService.validateLiveness((Map<String,Object>)analyzeMetrics.getOrDefault("challengeMetrics", analyzeMetrics));
-                livenessPassed = Boolean.TRUE.equals(lv.get("livenessPassed"));
-                noteBuilder.append("liveness=").append(String.valueOf(livenessPassed)).append(";");
-                // add raw blink/yaw if present for debugging
-                if (lv.get("blinkProb") != null) noteBuilder.append("blinkProb=").append(String.valueOf(lv.get("blinkProb"))).append(";");
-                if (lv.get("yawDelta") != null) noteBuilder.append("yawDelta=").append(String.valueOf(lv.get("yawDelta"))).append(";");
+                // lấy map liveness từ AI
+                Object livenessObj = analyzeMetrics.get("liveness");
+                if (livenessObj instanceof Map) {
+                    Map<String, Object> livenessMap = (Map<String,Object>) livenessObj;
+                    Object lsObj = livenessMap.getOrDefault("livenessScore", livenessMap.get("score"));
+                    if (lsObj instanceof Number) {
+                        double ls = ((Number) lsObj).doubleValue();
+                        livenessPassed = ls >= faceRecognitionService.getLivenessThreshold();
+                        noteBuilder.append("liveness=").append(livenessPassed).append(";");
+                        noteBuilder.append("livenessScore=").append(ls).append(";");
+                    }
+                    if (livenessMap.get("blinkProb") != null) noteBuilder.append("blinkProb=").append(livenessMap.get("blinkProb")).append(";");
+                    if (livenessMap.get("yawDelta") != null) noteBuilder.append("yawDelta=").append(livenessMap.get("yawDelta")).append(";");
+                }
             } catch (Exception ex) {
                 // ignore
             }

@@ -7,3 +7,4 @@ online_classroom_uml.uml
 
 socket-server/node_modules
 .env
+ai_service/face_recognition_service/venv

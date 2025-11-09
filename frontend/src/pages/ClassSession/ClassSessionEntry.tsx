@@ -78,7 +78,7 @@ const ClassSessionEntry: React.FC = () => {
         <AttendanceCapture
           classSessionId={id}
           userId={authMemory.getUser()?.id || undefined}
-          apiUrl={getApiBase()}
+          apiUrl={"http://localhost:8070"}
           onSuccess={(info) => {
             // mark attended immediately when backend reports success
             setAttended(true);
@@ -93,7 +93,7 @@ const ClassSessionEntry: React.FC = () => {
             onClick={async () => {
               try {
                 const base = getApiBase();
-                const endpoint = `${base}/api/class-session/${id}/attendance/me`;
+                const endpoint = `http://localhost:8070/api/class-session/${id}/attendance/me`;
                 const response = await axios.get(endpoint);
                 const json = response?.data;
                 const info = json?.data;
