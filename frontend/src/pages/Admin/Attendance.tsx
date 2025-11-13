@@ -13,7 +13,7 @@ export const AttendancePage: React.FC = () => {
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const pageSize = 10;
-
+  console.log(attendance);
   const fetchClassrooms = async () => {
     try {
       const response = await AdminService.getClassrooms(1, 100);
@@ -104,20 +104,48 @@ export const AttendancePage: React.FC = () => {
   };
 
   const columns = [
-    { key: "userName", title: "Student Name" },
+    { key: "studentName", title: "Student Name" },
     {
-      key: "verifiedAt",
-      title: "Verified At",
+      key: "attendanceTime",
+      title: "Attendance Time",
       render: (record: Attendance) =>
-        record.verifiedAt
-          ? new Date(record.verifiedAt).toLocaleString()
+        record.attendanceTime
+          ? new Date(record.attendanceTime).toLocaleString()
           : "N/A",
     },
     {
-      key: "confidence",
-      title: "Confidence",
+      key: "isPassed",
+      title: "AI Verified",
       render: (record: Attendance) =>
-        record.confidence ? `${(record.confidence * 100).toFixed(1)}%` : "N/A",
+        record.isPassed ? (
+          <span className="text-green-600 font-medium">✔ Passed</span>
+        ) : (
+          <span className="text-red-600 font-medium">✖ Failed</span>
+        ),
+    },
+    {
+      key: "note",
+      title: "AI Info",
+      render: (record: Attendance) => {
+        const info = record.note
+          ?.split(";")
+          .filter(
+            (s) => s.includes("similarity") || s.includes("livenessScore")
+          )
+          .map((s) => s.split("="))
+          .map(([k, v]) => ({ key: k, val: parseFloat(v).toFixed(2) }));
+        return info?.length ? (
+          <div className="text-xs text-gray-700">
+            {info.map((i) => (
+              <div key={i.key}>
+                <strong>{i.key}</strong>: {i.val}
+              </div>
+            ))}
+          </div>
+        ) : (
+          "-"
+        );
+      },
     },
     {
       key: "status",
@@ -136,20 +164,7 @@ export const AttendancePage: React.FC = () => {
               : "⚠️"}{" "}
             {record.status}
           </span>
-          <select
-            value={record.status}
-            onChange={(e) =>
-              handleStatusUpdate(
-                record.id,
-                e.target.value as Attendance["status"]
-              )
-            }
-            className="text-sm border rounded px-2 py-1"
-          >
-            <option value="PRESENT">Mark Present</option>
-            <option value="ABSENT">Mark Absent</option>
-            <option value="SUSPICIOUS">Mark Suspicious</option>
-          </select>
+
         </div>
       ),
     },
@@ -162,45 +177,47 @@ export const AttendancePage: React.FC = () => {
           Attendance Tracking
         </h1>
 
-        <div className="flex gap-4 mb-6">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Classroom
-            </label>
-            <select
-              value={selectedClassroom}
-              onChange={(e) => setSelectedClassroom(e.target.value)}
-              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-            >
-              <option value="">Select a classroom</option>
-              {classrooms.map((classroom) => (
-                <option key={classroom.id} value={classroom.id}>
-                  {classroom.name}
-                </option>
-              ))}
-            </select>
-          </div>
+<div className="flex flex-col md:flex-row gap-6 mb-6">
+  {/* Classroom Dropdown */}
+  <div className="flex-1">
+    <label className="block text-sm font-semibold text-gray-700 mb-2">
+      Select Classroom
+    </label>
+    <select
+      value={selectedClassroom}
+      onChange={(e) => setSelectedClassroom(e.target.value)}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-500 transition sm:text-sm"
+    >
+      <option value="">Select a classroom</option>
+      {classrooms.map((classroom) => (
+        <option key={classroom.id} value={classroom.id}>
+          {classroom.name}
+        </option>
+      ))}
+    </select>
+  </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1">
-              Select Session
-            </label>
-            <select
-              value={selectedSession}
-              onChange={(e) => setSelectedSession(e.target.value)}
-              className="rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
-              disabled={!selectedClassroom}
-            >
-              <option value="">Select a session</option>
-              {sessions.map((session) => (
-                <option key={session.id} value={session.id}>
-                  {session.title} (
-                  {new Date(session.startTime).toLocaleDateString()})
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
+  {/* Session Dropdown */}
+  <div className="flex-1">
+    <label className="block text-sm font-semibold text-gray-700 mb-2">
+      Select Session
+    </label>
+    <select
+      value={selectedSession}
+      onChange={(e) => setSelectedSession(e.target.value)}
+      className="w-full px-3 py-2 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-blue-500 transition sm:text-sm disabled:bg-gray-100 disabled:text-gray-400"
+      disabled={!selectedClassroom}
+    >
+      <option value="">Select a session</option>
+      {sessions.map((session) => (
+        <option key={session.id} value={session.id}>
+          {session.title} ({new Date(session.startTime).toLocaleDateString("en-GB")})
+        </option>
+      ))}
+    </select>
+  </div>
+</div>
+
 
         {selectedSession && (
           <div className="bg-gray-50 p-4 rounded-lg mb-6">

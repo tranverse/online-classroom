@@ -12,11 +12,12 @@ const UserHeader: React.FC = () => {
   const userId = user && ((user as any).id || (user as any).userId);
   const baseLink =
     user && (user as any).role === "TEACHER"
-      ? "/teacher"
+      ? "/teacher/classrooms"
       : "/student/classrooms";
   const classroomLink = userId
     ? `${baseLink}/user/${encodeURIComponent(userId)}`
     : baseLink;
+  const filesLink = `${baseLink}/files`;
 
   return (
     <header className="bg-white border-b shadow-sm px-6 py-3">
@@ -32,7 +33,7 @@ const UserHeader: React.FC = () => {
           </Link>
 
           <Link
-            to="/student/files"
+            to={filesLink}
             className="flex items-center gap-1 hover:text-blue-600 transition-colors"
           >
             <FiFolder className="text-xl" />

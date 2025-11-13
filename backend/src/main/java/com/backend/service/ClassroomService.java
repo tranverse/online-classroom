@@ -1,8 +1,10 @@
 package com.backend.service;
 
+import java.time.LocalDate;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import com.backend.enums.ClassroomStatus;
 import org.springframework.stereotype.Service;
 
 import com.backend.dto.classroom.ClassroomRequest;
@@ -26,6 +28,7 @@ import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
 import lombok.extern.slf4j.Slf4j;
+import java.time.LocalDate;
 
 @Service
 @RequiredArgsConstructor
@@ -38,14 +41,31 @@ public class ClassroomService {
     StudentClassroomMapper studentClassroomMapper;
     StudentClassroomRepository studentClassroomRepository;
 
+
     public ClassroomResponse createClassroom(ClassroomRequest classroomRequest) {
-        if(!userRepository.existsById(classroomRequest.getTeacher().getId())) {
+        // Kiểm tra teacher tồn tại
+        if (!userRepository.existsById(classroomRequest.getTeacher().getId())) {
             throw new AppException(ErrorCode.USER_NOT_FOUND);
         }
-        if(userRepository.findRoleById(classroomRequest.getTeacher().getId()) != Role.TEACHER){
+
+        // Kiểm tra role
+        if (userRepository.findRoleById(classroomRequest.getTeacher().getId()) != Role.TEACHER) {
             throw new AppException(ErrorCode.INVALID_ROLE);
         }
+
+        // Map request -> entity
         Classroom classroom = classroomMapper.toClassRoom(classroomRequest);
+
+        // Set trạng thái dựa trên startDate
+        LocalDate today = LocalDate.now();
+        LocalDate startDate = classroomRequest.getStartDate(); // giả sử startDate là LocalDate
+        if (startDate.isEqual(today) || startDate.isBefore(today)) {
+            classroom.setStatus(ClassroomStatus.ACTIVE);
+        } else {
+            classroom.setStatus(ClassroomStatus.DRAFT);
+        }
+
+        // Lưu
         classroomRepository.save(classroom);
 
         return classroomMapper.toClassroomResponse(classroom);

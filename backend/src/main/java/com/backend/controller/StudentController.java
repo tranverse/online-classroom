@@ -468,15 +468,17 @@ public class StudentController {
     public ResponseEntity<ApiResponse<Map<String, Object>>> verifyAttendance(@RequestBody Map<String, Object> payload) {
         try {
             log.debug("verifyAttendance payload keys: {}", payload == null ? "null" : payload.keySet());
+
             // extract descriptor from payload (either client-side descriptor array or imageBase64 -> server extractor)
             Object descObj = payload.get("descriptor");
             com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
             java.util.List<Double> descriptor = null;
+            String reason = null;
+
             if (descObj != null) {
-                descriptor = mapper.convertValue(descObj, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>(){});
+                descriptor = mapper.convertValue(descObj, new com.fasterxml.jackson.core.type.TypeReference<java.util.List<Double>>() {});
                 log.debug("Descriptor present, length: {}", descriptor.size());
             } else if (payload.get("imageBase64") != null) {
-                // allow frontend to POST imageBase64 so server uses same extractor as enroll
                 try {
                     String imageBase64 = String.valueOf(payload.get("imageBase64"));
                     // FaceRecognitionService.extractDescriptor accepts either a base64 string or JSON array string
@@ -485,38 +487,39 @@ public class StudentController {
                         descriptor = extracted;
                         log.debug("Extracted descriptor length: {}", descriptor.size());
                     } else {
-                        // set a reason later; continue so we can respond with helpful message
-                        // but ensure descriptor remains null to indicate failure
+                        reason = "descriptor_extraction_failed";
+                        log.debug("Descriptor extraction returned empty");
                     }
                 } catch (Exception e) {
-                    // extraction failed; leave descriptor null
+                    reason = "descriptor_extraction_failed";
+                    log.debug("Descriptor extraction failed", e);
                 }
             }
 
+            // Determine studentId
             String studentId = null;
-            if (payload.get("studentId") != null) studentId = String.valueOf(payload.get("studentId"));
-            else {
-                // derive from authenticated principal (email stored as name)
+            if (payload.get("studentId") != null) {
+                studentId = String.valueOf(payload.get("studentId"));
+            } else {
+                // derive from authenticated principal
                 try {
                     String email = SecurityContextHolder.getContext().getAuthentication().getName();
                     com.backend.model.User u = userRepository.findByEmail(email).orElse(null);
                     if (u != null) studentId = u.getId();
                 } catch (Exception ex) {
-                    // ignore
+                    log.debug("Failed to get studentId from authenticated user", ex);
                 }
             }
 
             double bestSim = -1.0;
             boolean matched = false;
-            String reason = null;
             String nearestDescriptorId = null;
 
             if (studentId == null) {
                 reason = "student_not_found";
                 log.debug("Reason: {}", reason);
             } else if (descriptor == null || descriptor.isEmpty()) {
-                // descriptor extraction failed or not provided
-                reason = "descriptor_extraction_failed";
+                if (reason == null) reason = "descriptor_extraction_failed";
                 log.debug("Reason: {}", reason);
             } else {
                 java.util.List<java.util.Map<String,Object>> rows = studentFaceService.getDescriptorRowsForUser(studentId);
@@ -527,7 +530,6 @@ public class StudentController {
                     for (java.util.Map<String,Object> row : rows) {
                         @SuppressWarnings("unchecked")
                         java.util.List<Double> s = (java.util.List<Double>) row.get("descriptor");
-                        // convert to double[] for cosineSimilarity
                         double[] stored = new double[s.size()];
                         for (int i = 0; i < s.size(); i++) stored[i] = s.get(i);
                         double[] probe = new double[descriptor.size()];
@@ -544,13 +546,12 @@ public class StudentController {
 
             Map<String, Object> result = new HashMap<>();
             result.put("matched", matched);
-            // report similarity and a compatibility 'distance' for older clients: distance = 1 - similarity
             result.put("similarity", bestSim < 0 ? null : bestSim);
             result.put("distance", bestSim < 0 ? null : (1.0 - bestSim));
             if (nearestDescriptorId != null) result.put("nearestDescriptorId", nearestDescriptorId);
             if (reason != null) result.put("reason", reason);
 
-            // human readable Vietnamese message suggestions
+            // human readable Vietnamese message
             String humanMsg = null;
             if (reason != null) {
                 switch (reason) {
@@ -568,7 +569,6 @@ public class StudentController {
                         humanMsg = "Không thể xác thực khuôn mặt. Vui lòng thử lại hoặc liên hệ giảng viên.";
                 }
             } else {
-                // no explicit reason: infer from matched/similarity
                 if (!matched) {
                     double thr = faceRecognitionService != null ? faceRecognitionService.getSimilarityThreshold() : 0.58;
                     if (bestSim >= 0 && bestSim < thr) {
@@ -582,15 +582,22 @@ public class StudentController {
             }
             result.put("humanMessageVi", humanMsg);
 
-            // include any analyze/liveness hints if present in payload (if client sent them)
+            // include analyze/liveness hints if present
             if (payload.get("analyzeMetrics") != null) {
                 result.put("analyzeMetrics", payload.get("analyzeMetrics"));
             }
 
-            return ResponseEntity.ok(ApiResponse.<Map<String,Object>>builder().message("verify").data(result).build());
+            return ResponseEntity.ok(ApiResponse.<Map<String,Object>>builder()
+                    .message("verify")
+                    .data(result)
+                    .build());
         } catch (Exception ex) {
             log.error("Verify failed", ex);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<Map<String,Object>>builder().success(false).message("Verify failed").build());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.<Map<String,Object>>builder()
+                            .success(false)
+                            .message("Verify failed")
+                            .build());
         }
     }
 

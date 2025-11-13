@@ -14,7 +14,11 @@ const TeacherService = {
       axiosInstance.get(`/api/teacher/classes/${classId}/sessions/upcoming`)
     );
   },
-  // other teacher endpoints can be added here
+  getClassroomDetails(id) {
+    return service(
+      axiosInstance.get(`/api/teacher/classes/${id}/details`)
+    );
+  },
 };
 
 export default TeacherService;

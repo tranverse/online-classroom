@@ -18,14 +18,16 @@ import com.backend.repository.ResourceRepository;
 public class ResourceService {
     private final ResourceRepository resourceRepository;
     private final FolderRepository folderRepository;
+    private final com.backend.repository.ResourceClassroomRepository resourceClassroomRepository;
     private static final Logger log = LoggerFactory.getLogger(ResourceService.class);
 
-    public ResourceService(ResourceRepository resourceRepository, FolderRepository folderRepository) {
+    public ResourceService(ResourceRepository resourceRepository, FolderRepository folderRepository, com.backend.repository.ResourceClassroomRepository resourceClassroomRepository) {
         this.resourceRepository = resourceRepository;
         this.folderRepository = folderRepository;
+        this.resourceClassroomRepository = resourceClassroomRepository;
     }
 
-    public Resource saveResourceMetadata(String name, String storagePath, String mimeType, Long size, String folderId, User user) {
+    public Resource saveResourceMetadata(String name, String storagePath, String mimeType, Long size, String folderId, String classroomId, User user) {
         Resource r = new Resource();
         r.setName(name);
         r.setStoragePath(storagePath);
@@ -37,7 +39,32 @@ public class ResourceService {
             f.ifPresent(r::setFolder);
         }
         r.setUploadedBy(user);
-        return resourceRepository.save(r);
+        Resource saved = resourceRepository.save(r);
+        // if classroomId provided, create link
+        if (classroomId != null && !classroomId.isBlank()) {
+            try {
+                com.backend.model.Classroom c = new com.backend.model.Classroom();
+                c.setId(classroomId);
+                com.backend.model.ResourceClassroom link = new com.backend.model.ResourceClassroom();
+                link.setResource(saved);
+                link.setClassroom(c);
+                resourceClassroomRepository.save(link);
+            } catch (Exception ex) {
+                log.warn("Failed to create ResourceClassroom link: {}", ex.getMessage());
+            }
+        }
+        return saved;
+    }
+
+    public java.util.List<Resource> listByClassroom(String classroomId) {
+        if (classroomId == null || classroomId.isBlank()) return java.util.List.of();
+        try {
+            java.util.List<com.backend.model.ResourceClassroom> links = resourceClassroomRepository.findAllByClassroom_Id(classroomId);
+            return links.stream().map(l -> l.getResource()).toList();
+        } catch (Exception ex) {
+            log.warn("Failed to list resources for classroom {}: {}", classroomId, ex.getMessage());
+            return java.util.List.of();
+        }
     }
 
     public List<Resource> listByFolder(String folderId) {

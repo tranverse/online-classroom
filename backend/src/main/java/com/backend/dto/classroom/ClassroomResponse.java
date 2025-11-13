@@ -4,6 +4,7 @@ import java.time.LocalDate;
 
 import com.backend.dto.user.UserResponse;
 
+import com.backend.enums.ClassroomStatus;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -16,4 +17,5 @@ public class ClassroomResponse {
     LocalDate endDate;
     Integer quantity;
     UserResponse teacher;
+    ClassroomStatus status;
 }

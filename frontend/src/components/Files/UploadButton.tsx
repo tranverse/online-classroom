@@ -3,9 +3,17 @@ import FilesService from "@services/files.service";
 import { useToast } from "@components/Toast";
 import { useNavigate } from "react-router-dom";
 
-type Props = { folderId?: string; onUploaded?: () => void };
+type Props = {
+  folderId?: string;
+  classroomId?: string;
+  onUploaded?: () => void;
+};
 
-const UploadButton: React.FC<Props> = ({ folderId, onUploaded }) => {
+const UploadButton: React.FC<Props> = ({
+  folderId,
+  classroomId,
+  onUploaded,
+}) => {
   const ref = useRef<HTMLInputElement | null>(null);
   const toast = useToast();
   const nav = useNavigate();
@@ -18,10 +26,16 @@ const UploadButton: React.FC<Props> = ({ folderId, onUploaded }) => {
     const file = e.target.files?.[0];
     if (!file) return;
     // capture ref locally so we can reset after async
-    console.debug("UploadButton: calling uploadFile with folderId=", folderId);
+    console.debug(
+      "UploadButton: calling uploadFile with folderId=",
+      folderId,
+      "classroomId=",
+      classroomId
+    );
     const inputEl = ref.current;
     try {
-      const resp = await FilesService.uploadFile(file, folderId);
+      // prefer classroom scoping if classroomId present — FilesService will handle it
+      const resp = await FilesService.uploadFile(file, folderId, classroomId);
       console.log("UploadButton: upload response:", resp);
       toast?.show
         ? toast.show("Uploaded", "success")

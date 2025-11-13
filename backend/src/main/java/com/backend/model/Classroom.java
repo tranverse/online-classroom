@@ -1,5 +1,6 @@
 package com.backend.model;
 
+import com.backend.enums.ClassroomStatus;
 import com.fasterxml.jackson.annotation.JsonBackReference;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonManagedReference;
@@ -31,6 +32,9 @@ public class Classroom {
     Integer quantity;
 
     Boolean isDeleted = Boolean.FALSE;
+
+    @Enumerated(EnumType.STRING)
+    ClassroomStatus status = ClassroomStatus.DRAFT;
 
     @ManyToOne(fetch = FetchType.EAGER)
     @JoinColumn(name = "teacher_id")

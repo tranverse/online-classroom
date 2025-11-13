@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from "react";
 import TeacherService from "../../services/teacher.service";
 import ClassroomService from "../../services/classroom.service";
-import { Link } from "react-router-dom";
 import authMemory from "@services/authMemory";
+import { Link } from "react-router-dom";
+import { FaChalkboardTeacher, FaClock, FaDoorOpen, FaUserGraduate } from "react-icons/fa";
 
 const TeacherDashboard: React.FC = () => {
   const [classrooms, setClassrooms] = useState<any[]>([]);
@@ -75,76 +76,76 @@ const TeacherDashboard: React.FC = () => {
   }, []);
 
   return (
-    <div className="w-full h-screen flex flex-col items-center bg-gradient-to-br from-emerald-50 to-white p-6">
-      <header className="text-center mb-6">
-        <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
-          Teacher Dashboard
-        </h1>
-        <p className="text-gray-500 mt-1 text-sm md:text-base">
-          View and manage your classrooms and upcoming sessions
-        </p>
-      </header>
-
-      {loading && (
-        <div className="text-gray-500 text-center py-10">
-          Loading classrooms...
+    <div className="w-full h-full flex justify-center items-start p-6">
+      <div className="w-full max-w-5xl h-full bg-white rounded-2xl border border-gray-200 shadow-lg flex flex-col overflow-hidden">
+        {/* Header section */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-gray-50">
+          <div className="flex items-center gap-2">
+            <FaChalkboardTeacher className="text-emerald-600 text-xl" />
+            <h2 className="text-lg font-semibold text-gray-800">
+              Upcoming Sessions
+            </h2>
+          </div>
         </div>
-      )}
 
-      {!loading && classrooms.length === 0 && (
-        <div className="text-gray-400 text-center py-10">
-          No classrooms found
-        </div>
-      )}
-
-      <div className="w-full max-w-6xl flex-1 overflow-y-auto space-y-6 pr-2 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-gray-100">
-        {classrooms.map((c) => (
-          <div
-            key={c.id}
-            className="bg-white rounded-2xl shadow-md hover:shadow-lg transition-all p-6 flex flex-col"
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <h2 className="text-xl font-semibold text-gray-800">
-                  {c.name}
-                </h2>
-                <p className="text-sm text-gray-500">{c.code}</p>
-              </div>
-              <Link
-                to={`/student/classrooms/${c.id}`}
-                className="text-blue-600 text-sm font-medium hover:underline"
-              >
-                Open
-              </Link>
-            </div>
-
-            {c.upcomingSessions && c.upcomingSessions.length > 0 && (
-              <div className="mt-4">
-                <h3 className="text-gray-700 font-medium mb-2">
-                  Upcoming Sessions
-                </h3>
-                <div className="flex flex-col gap-2 max-h-60 overflow-y-auto">
-                  {c.upcomingSessions.map((s: any) => (
+        {/* Scrollable content */}
+        <div className="px-6 py-4">
+          <div className="max-h-[500px] overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-gray-100">
+            {classrooms.length ? (
+              classrooms.map((c) =>
+                c.upcomingSessions.map((s: any) => {
+                  const start = s.startTime
+                    ? new Date(s.startTime).toLocaleString()
+                    : "N/A";
+                  const end = s.endTime
+                    ? new Date(s.endTime).toLocaleString()
+                    : "N/A";
+                  const teacherName = s.teacher || c?.teacher?.name || "TBA";
+                  return (
                     <div
                       key={s.id}
-                      className="flex justify-between items-center bg-gray-50 rounded-xl px-3 py-2 hover:bg-emerald-50 transition"
+                      className="p-4 bg-gray-50 border border-gray-100 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md"
                     >
-                      <span className="text-gray-700 text-sm">
-                        {s.title || s.startsAt}
-                      </span>
+                      <div className="flex flex-col space-y-1 text-sm">
+                        <div className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                          <FaChalkboardTeacher className="text-emerald-600" />
+                          {s.title}
+                        </div>
+                        <div className="text-gray-600 flex items-center gap-2">
+                          <FaDoorOpen className="text-emerald-500" />
+                          {c.name || "Unknown"}
+                        </div>
+                        <div className="text-gray-600 flex items-center gap-2">
+                          <FaUserGraduate className="text-emerald-500" />
+                          {teacherName}
+                        </div>
+                        <div className="text-gray-500 flex items-center gap-2">
+                          <FaClock className="text-emerald-500" />
+                          Start: {start}
+                        </div>
+                        <div className="text-gray-500 flex items-center gap-2">
+                          <FaClock className="text-emerald-500" />
+                          End: {end}
+                        </div>
+                      </div>
+
                       <Link
                         to={`/classroom/online/${s.id}`}
-                        className="text-blue-600 text-sm font-medium hover:underline"
+                        className="mt-3 md:mt-0 px-5 py-2 text-sm bg-emerald-500 text-white rounded-lg shadow hover:bg-emerald-600 hover:shadow-md transition-all"
                       >
                         Open
                       </Link>
                     </div>
-                  ))}
-                </div>
+                  );
+                })
+              )
+            ) : (
+              <div className="text-gray-500 text-center py-10 border border-dashed border-gray-300 rounded-xl bg-gray-50 text-sm">
+                No upcoming sessions found.
               </div>
             )}
           </div>
-        ))}
+        </div>
       </div>
     </div>
   );

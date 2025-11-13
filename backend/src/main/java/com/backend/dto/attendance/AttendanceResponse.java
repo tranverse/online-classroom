@@ -15,4 +15,7 @@ public class AttendanceResponse {
     Boolean isPassed;
     String note;
     AttendanceStatus status;
+    // optional student info populated when available
+    String studentId;
+    String studentName;
 }

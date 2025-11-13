@@ -279,9 +279,25 @@ public class AttendanceService {
     }
 
     public List<AttendanceResponse> getAttendancesForSession(String classSessionId) {
-        return attendanceRepository.findAll().stream()
-                .filter(a -> a.getClassSession() != null && classSessionId.equals(a.getClassSession().getId()))
-                .map(this::toResponse)
+        // use repository query that join-fetches student to avoid lazy-loading and N+1
+        return attendanceRepository.findAllByClassSessionIdWithStudent(classSessionId).stream()
+                .map(a -> {
+                    AttendanceResponse r = toResponse(a);
+                    if (a.getStudent() != null) {
+                        r.setStudentId(a.getStudent().getId());
+                        // try common name fields
+                        String name = null;
+                        try {
+                            if (a.getStudent().getName() != null && !a.getStudent().getName().isBlank()) name = a.getStudent().getName();
+                        } catch (Exception ex) {
+                        }
+                        if (name == null || name.isBlank()) {
+                            try { name = a.getStudent().getEmail(); } catch (Exception ex) { }
+                        }
+                        r.setStudentName(name);
+                    }
+                    return r;
+                })
                 .collect(Collectors.toList());
     }
 

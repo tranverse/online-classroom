@@ -6,11 +6,54 @@ import { Modal } from "../../components/Modal";
 import { ErrorBoundary } from "../../components/ErrorBoundary";
 import { toast } from "react-toastify";
 import { Link } from "react-router-dom";
+import { FiEdit, FiEye, FiTrash2, FiUserPlus } from "react-icons/fi";
+import { ToastContainer } from "react-toastify";
+import "react-toastify/dist/ReactToastify.css";
+
+interface DeleteModalProps {
+  open: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title?: string;
+  description?: string;
+}
+
+export const DeleteModal: React.FC<DeleteModalProps> = ({
+  open,
+  onClose,
+  onConfirm,
+  title = "Confirm Deletion",
+  description = "Are you sure you want to delete this item? This action cannot be undone.",
+}) => {
+  return (
+    <Modal open={open} onClose={onClose} title={title}>
+      <p className="text-sm text-gray-600 mb-6">{description}</p>
+      <div className="flex justify-end space-x-3">
+        <button
+          onClick={onClose}
+          className="px-4 py-2 rounded-lg bg-gray-100 text-gray-700 hover:bg-gray-200 transition"
+        >
+          Cancel
+        </button>
+        <button
+          onClick={() => {
+            onConfirm();
+          }}
+          className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition"
+        >
+          Delete
+        </button>
+      </div>
+    </Modal>
+  );
+};
 
 interface ClassroomFormData {
   name: string;
   quantity: number;
   teacherId: string;
+  startDate: Date;
+  endDate: Date;
 }
 
 const ClassroomForm: React.FC<{
@@ -23,28 +66,65 @@ const ClassroomForm: React.FC<{
     name: initialData?.name || "",
     quantity: initialData?.quantity ?? 1,
     teacherId: initialData?.teacherId || "",
+    startDate: initialData?.startDate || new Date().toISOString().split("T")[0],
+    endDate: initialData?.endDate || new Date().toISOString().split("T")[0],
   });
+
+  const [errors, setErrors] = useState<{
+    startDate?: string;
+    endDate?: string;
+  }>({});
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const newErrors: typeof errors = {};
+    const today = new Date().toISOString().split("T")[0];
+
+    if (formData.startDate < today) {
+      newErrors.startDate = "Start date cannot be in the past.";
+    }
+    if (formData.endDate < formData.startDate) {
+      newErrors.endDate = "End date must be after start date.";
+    }
+
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors);
+      return;
+    }
+
+    setErrors({});
     await onSubmit(formData);
   };
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 bg-white p-8 rounded-2xl shadow-lg border border-gray-100 max-w-xl mx-auto"
+    >
+      {/* Tiêu đề */}
+      <h2 className="text-2xl font-semibold text-gray-800 border-b pb-3 mb-4">
+        {initialData ? "Edit Classroom" : "Create New Classroom"}
+      </h2>
+
+      {/* Name */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">Name</label>
+        <label className="block text-sm font-medium text-gray-700 mb-1">
+          Classroom Name
+        </label>
         <input
           type="text"
           value={formData.name}
           onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+          placeholder="Enter classroom name"
+          className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2.5"
           required
         />
       </div>
 
+      {/* Teacher */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
           Teacher
         </label>
         <select
@@ -52,7 +132,7 @@ const ClassroomForm: React.FC<{
           onChange={(e) =>
             setFormData({ ...formData, teacherId: e.target.value })
           }
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+          className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2.5"
           required
         >
           <option value="">Select a teacher</option>
@@ -64,8 +144,54 @@ const ClassroomForm: React.FC<{
         </select>
       </div>
 
+      {/* Start & End Date */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Start Date
+          </label>
+          <input
+            type="date"
+            min={new Date().toISOString().split("T")[0]}
+            value={formData.startDate}
+            onChange={(e) =>
+              setFormData({ ...formData, startDate: e.target.value })
+            }
+            className={`mt-1 block w-full rounded-xl border ${
+              errors.startDate ? "border-red-400" : "border-gray-300"
+            } shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2.5`}
+            required
+          />
+          {errors.startDate && (
+            <p className="text-xs text-red-600 mt-1">{errors.startDate}</p>
+          )}
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            End Date
+          </label>
+          <input
+            type="date"
+            min={formData.startDate}
+            value={formData.endDate}
+            onChange={(e) =>
+              setFormData({ ...formData, endDate: e.target.value })
+            }
+            className={`mt-1 block w-full rounded-xl border ${
+              errors.endDate ? "border-red-400" : "border-gray-300"
+            } shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2.5`}
+            required
+          />
+          {errors.endDate && (
+            <p className="text-xs text-red-600 mt-1">{errors.endDate}</p>
+          )}
+        </div>
+      </div>
+
+      {/* Quantity */}
       <div>
-        <label className="block text-sm font-medium text-gray-700">
+        <label className="block text-sm font-medium text-gray-700 mb-1">
           Quantity
         </label>
         <input
@@ -75,22 +201,23 @@ const ClassroomForm: React.FC<{
           onChange={(e) =>
             setFormData({ ...formData, quantity: Number(e.target.value) })
           }
-          className="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm"
+          className="mt-1 block w-full rounded-xl border-gray-300 shadow-sm focus:border-blue-500 focus:ring-blue-500 sm:text-sm p-2.5"
           required
         />
       </div>
 
-      <div className="flex justify-end space-x-3 pt-4">
+      {/* Buttons */}
+      <div className="flex justify-end space-x-3 pt-5 border-t border-gray-100">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
+          className="px-5 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-xl hover:bg-gray-200 transition"
         >
           Cancel
         </button>
         <button
           type="submit"
-          className="px-4 py-2 text-sm font-medium text-white bg-blue-600 border border-transparent rounded-md hover:bg-blue-700"
+          className="px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-xl hover:bg-blue-700 transition"
         >
           Save
         </button>
@@ -98,23 +225,57 @@ const ClassroomForm: React.FC<{
     </form>
   );
 };
+
+export default ClassroomForm;
+
 interface UserInviteFormProps {
   classroomId: string;
   users: User[];
+  selectedClassroom: Classroom; // <-- thêm
   onSuccess: () => void;
   onCancel: () => void;
 }
+
 export const UserInviteForm: React.FC<UserInviteFormProps> = ({
   classroomId,
   users,
   onSuccess,
   onCancel,
+  selectedClassroom,
 }) => {
   const [role, setRole] = useState<"STUDENT" | "TEACHER">("STUDENT");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [loading, setLoading] = useState(false);
+  const [data, setData] = useState<any>(null);
 
-  const filteredUsers = users.filter((u) => u.role === role);
+  useEffect(() => {
+    if (!selectedClassroom.id) return;
+    const load = async () => {
+      setLoading(true);
+      try {
+        const resp = await AdminService.getClassroomDetails(
+          selectedClassroom.id
+        );
+        setData(resp.data);
+      } catch (err) {
+        console.error("Failed to load classroom details", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+    load();
+  }, [selectedClassroom.id]);
+  console.log("selectedClassroom", data);
+  // Lấy tất cả user đã có trong lớp
+  const existingUserIds = new Set([
+    ...(data?.students?.map((s) => s.student.id) || []),
+    selectedClassroom?.teacher?.id,
+  ]);
+
+  // Chỉ lọc user chưa có trong lớp và đúng role
+  const filteredUsers = users.filter(
+    (u) => u.role === role && !existingUserIds.has(u.id)
+  );
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -140,11 +301,10 @@ export const UserInviteForm: React.FC<UserInviteFormProps> = ({
         } as any);
       }
 
-      toast.success("User(s) invited successfully!");
       onSuccess();
     } catch (err) {
       console.error("Invite failed", err);
-      toast.error("Failed to invite users. Please try again.");
+      toast.error(err.response.data.message);
     } finally {
       setLoading(false);
     }
@@ -153,11 +313,11 @@ export const UserInviteForm: React.FC<UserInviteFormProps> = ({
   return (
     <form
       onSubmit={handleSubmit}
-      className="space-y-5 bg-white p-6 rounded-xl border border-gray-200 shadow-sm"
+      className="space-y-6 bg-white p-8 rounded-2xl shadow-lg border border-gray-200"
     >
       {/* Role Selector */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
+      <div className="flex flex-col">
+        <label className="text-sm font-semibold text-gray-700 mb-2">
           Invite as
         </label>
         <select
@@ -166,7 +326,7 @@ export const UserInviteForm: React.FC<UserInviteFormProps> = ({
             setRole(e.target.value as "STUDENT" | "TEACHER");
             setSelectedIds([]);
           }}
-          className="block w-full rounded-md border border-gray-300 focus:border-blue-500 focus:ring-blue-500 sm:text-sm px-3 py-2"
+          className="w-full rounded-lg border border-gray-300 px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-200 focus:border-blue-500 transition"
         >
           <option value="STUDENT">Student</option>
           <option value="TEACHER">Teacher</option>
@@ -174,55 +334,68 @@ export const UserInviteForm: React.FC<UserInviteFormProps> = ({
       </div>
 
       {/* User Selector */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1">
-          Select users
+      <div className="flex flex-col">
+        <label className="text-sm font-semibold text-gray-700 mb-2">
+          Select Users
         </label>
+
         {filteredUsers.length > 0 ? (
-          <select
-            multiple
-            value={selectedIds}
-            onChange={(e) =>
-              setSelectedIds(
-                Array.from(e.target.selectedOptions, (opt) => opt.value)
-              )
-            }
-            className="block w-full rounded-md border border-gray-300 focus:ring-blue-500 focus:border-blue-500 sm:text-sm h-44 px-2 py-2"
-          >
+          <div className="border border-gray-300 rounded-lg h-48 overflow-y-auto shadow-sm">
             {filteredUsers.map((u) => (
-              <option key={u.id} value={u.id}>
-                {u.name} ({u.email})
-              </option>
+              <label
+                key={u.id}
+                className={`flex items-center justify-between px-4 py-2 cursor-pointer hover:bg-blue-50 transition ${
+                  selectedIds.includes(u.id) ? "bg-blue-100" : ""
+                }`}
+              >
+                <span className="text-sm text-gray-700">
+                  {u.name} <span className="text-gray-400">({u.email})</span>
+                </span>
+                <input
+                  type="checkbox"
+                  value={u.id}
+                  checked={selectedIds.includes(u.id)}
+                  onChange={(e) => {
+                    const id = e.target.value;
+                    setSelectedIds((prev) =>
+                      prev.includes(id)
+                        ? prev.filter((i) => i !== id)
+                        : [...prev, id]
+                    );
+                  }}
+                  className="w-4 h-4 text-blue-600 border-gray-300 rounded focus:ring-blue-500"
+                />
+              </label>
             ))}
-          </select>
+          </div>
         ) : (
           <p className="text-sm text-gray-500 italic mt-1">
             No users found for this role.
           </p>
         )}
+
         <p className="text-xs text-gray-400 mt-1">
-          Hold <b>Ctrl</b> (Windows) or <b>Command</b> (Mac) to select multiple
-          users.
+          Select multiple users by clicking the checkboxes.
         </p>
       </div>
 
       {/* Action Buttons */}
-      <div className="flex justify-end space-x-3 pt-4 border-t border-gray-200 mt-6">
+      <div className="flex justify-end space-x-4 pt-4 border-t border-gray-200 mt-6">
         <button
           type="button"
           onClick={onCancel}
-          className="px-4 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-md hover:bg-gray-200"
+          className="px-5 py-2 text-sm font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded-lg hover:bg-gray-200 transition"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={loading}
-          className="inline-flex items-center px-5 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-60"
+          className="flex items-center justify-center px-6 py-2 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50 transition"
         >
           {loading && (
             <svg
-              className="animate-spin -ml-1 mr-2 h-4 w-4 text-white"
+              className="animate-spin -ml-1 mr-2 h-5 w-5 text-white"
               xmlns="http://www.w3.org/2000/svg"
               fill="none"
               viewBox="0 0 24 24"
@@ -299,6 +472,7 @@ export const ClassroomsPage: React.FC = () => {
     fetchUsers();
   }, [page]);
 
+  // ✅ Create Classroom
   const handleCreateClassroom = async (data: ClassroomFormData) => {
     try {
       await AdminService.createClassroom({
@@ -306,14 +480,19 @@ export const ClassroomsPage: React.FC = () => {
         teacher: teachers.find((t) => t.id === data.teacherId)!,
         quantity: data.quantity,
         status: "ACTIVE",
+        startDate: data.startDate,
+        endDate: data.endDate,
       });
+      toast.success("Classroom created successfully!");
       setModalOpen(false);
       fetchClassrooms();
     } catch (error) {
       console.error("Failed to create classroom:", error);
+      toast.error("Failed to create classroom. Please try again.");
     }
   };
 
+  // ✅ Update Classroom
   const handleUpdateClassroom = async (data: ClassroomFormData) => {
     if (!selectedClassroom) return;
     try {
@@ -321,23 +500,53 @@ export const ClassroomsPage: React.FC = () => {
         name: data.name,
         teacher: teachers.find((t) => t.id === data.teacherId)!,
         quantity: data.quantity,
+        startDate: data.startDate,
+        endDate: data.endDate,
       });
+      toast.success("Classroom updated successfully!");
       setModalOpen(false);
       setSelectedClassroom(null);
       fetchClassrooms();
     } catch (error) {
       console.error("Failed to update classroom:", error);
+      toast.error("Failed to update classroom. Please try again.");
+    }
+  };
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [classroomToDelete, setClassroomToDelete] = useState<Classroom | null>(
+    null
+  );
+
+  const handleOpenDelete = (classroom: Classroom) => {
+    setClassroomToDelete(classroom);
+    setDeleteModalOpen(true);
+  };
+
+  const handleConfirmDelete = async () => {
+    if (!classroomToDelete) return;
+    try {
+      await AdminService.deleteClassroom(classroomToDelete.id);
+      toast.success("Classroom deleted successfully!");
+      fetchClassrooms();
+    } catch (error) {
+      toast.error("Failed to delete classroom. Please try again.");
+    } finally {
+      setDeleteModalOpen(false);
+      setClassroomToDelete(null);
     }
   };
 
+  // ✅ Delete Classroom
   const handleDeleteClassroom = async (id: string) => {
     if (!window.confirm("Are you sure you want to delete this classroom?"))
       return;
     try {
       await AdminService.deleteClassroom(id);
+      toast.success("Classroom deleted successfully!");
       fetchClassrooms();
     } catch (error) {
       console.error("Failed to delete classroom:", error);
+      toast.error("Failed to delete classroom. Please try again.");
     }
   };
 
@@ -360,7 +569,7 @@ export const ClassroomsPage: React.FC = () => {
       title: "Teacher",
       render: (classroom: Classroom) => classroom.teacher.name,
     },
-    { key: "studentCount", title: "Students" },
+    { key: "quantity", title: "Quantity" },
     {
       key: "status",
       title: "Status",
@@ -385,7 +594,7 @@ export const ClassroomsPage: React.FC = () => {
             to={`/admin/classrooms/${classroom.id}`}
             className="text-gray-600 hover:text-gray-800"
           >
-            View
+            <FiEye className="w-4 h-4" />
           </Link>
           <button
             onClick={() => {
@@ -394,20 +603,20 @@ export const ClassroomsPage: React.FC = () => {
             }}
             className="text-blue-600 hover:text-blue-800"
           >
-            Edit
+            <FiEdit className="w-4 h-4" />
           </button>
           <button
             onClick={() => handleOpenInvite(classroom)}
             className="text-green-600 hover:text-green-800"
           >
-            Invite
+            <FiUserPlus className="w-4 h-4" />
           </button>
 
           <button
-            onClick={() => handleDeleteClassroom(classroom.id)}
+            onClick={() => handleOpenDelete(classroom)}
             className="text-red-600 hover:text-red-800"
           >
-            Delete
+            <FiTrash2 className="w-4 h-4" />
           </button>
         </div>
       ),
@@ -499,6 +708,7 @@ export const ClassroomsPage: React.FC = () => {
           <UserInviteForm
             classroomId={selectedClassroom.id}
             users={users}
+            selectedClassroom={selectedClassroom} // <-- thêm
             onSuccess={() => {
               toast.success("Users invited successfully!");
               setInviteModalOpen(false);
@@ -512,7 +722,15 @@ export const ClassroomsPage: React.FC = () => {
           />
         )}
       </Modal>
-      {/* Classroom details moved to its own page: /admin/classrooms/:id */}
+      <DeleteModal
+        open={deleteModalOpen}
+        onClose={() => setDeleteModalOpen(false)}
+        onConfirm={handleConfirmDelete}
+        title="Delete Classroom"
+        description={`Are you sure you want to delete "${classroomToDelete?.name}"? This action cannot be undone.`}
+      />
+
+      <ToastContainer position="top-right" autoClose={2000} theme="colored" />
     </div>
   );
 };

@@ -6,8 +6,14 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.*;
-import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.web.bind.annotation.DeleteMapping;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.RequestPart;
+import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import com.backend.dto.ApiResponse;
@@ -17,6 +23,7 @@ import com.backend.model.User;
 import com.backend.repository.UserRepository;
 import com.backend.service.ResourceService;
 
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
 import lombok.experimental.FieldDefaults;
@@ -90,7 +97,14 @@ public class ResourceController {
                     } catch (Exception ignored) {}
                 }
 
-                Resource r = resourceService.saveResourceMetadata(file.getOriginalFilename(), storagePath, file.getContentType(), file.getSize(), resolvedFolderId, user);
+                // classroomId param may be included to associate resource with a classroom
+                String resolvedClassroomId = null;
+                try {
+                    String c = request.getParameter("classroomId");
+                    if (c != null && !c.isBlank()) resolvedClassroomId = c;
+                } catch (Exception ignored) {}
+
+                Resource r = resourceService.saveResourceMetadata(file.getOriginalFilename(), storagePath, file.getContentType(), file.getSize(), resolvedFolderId, resolvedClassroomId, user);
                 // Log folder association for debugging
                 System.out.println("uploadResource: received folderId=" + resolvedFolderId + ", saved resource folderId=" + (r.getFolder() != null ? r.getFolder().getId() : "null"));
                 com.backend.dto.resource.ResourceResponse rr = com.backend.dto.resource.ResourceResponse.from(r);
@@ -127,7 +141,21 @@ public class ResourceController {
     @GetMapping
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<ApiResponse<java.util.List<com.backend.dto.resource.ResourceResponse>>> listResources(@RequestParam(required = false) String folderId) {
-        List<Resource> list = resourceService.listByFolder(folderId);
+        // support classroomId to fetch resources for a class
+        String classroomId = null;
+        try {
+            // if a query param classroomId present, it will be picked up automatically by Spring if declared; read from request param instead
+            // but to keep signature simple, we allow folderId or classroomId via the same param name
+        } catch (Exception ignored) {}
+
+        // If client passed folderId starting with "classroom:" interpret as classroomId marker (optional)
+        List<Resource> list;
+        if (folderId != null && folderId.startsWith("classroom:")) {
+            String cid = folderId.substring("classroom:".length());
+            list = resourceService.listByClassroom(cid);
+        } else {
+            list = resourceService.listByFolder(folderId);
+        }
         java.util.List<com.backend.dto.resource.ResourceResponse> dto = list.stream().map(com.backend.dto.resource.ResourceResponse::from).toList();
         return ResponseEntity.ok(ApiResponse.<java.util.List<com.backend.dto.resource.ResourceResponse>>builder().data(dto).build());
     }

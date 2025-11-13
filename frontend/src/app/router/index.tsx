@@ -29,14 +29,12 @@ import ProfileAttendance from "@pages/Student/ProfileAttendance";
 import AttendanceUpload from "@pages/Student/AttendanceUpload";
 import FilesPage from "@pages/Student/Files";
 import StudentAssignments from "@pages/Student/Assignments";
+import TeacherClassrooms from "@pages/Teacher/TeacherClassrooms";
+import TeacherAssignmentPage from "@pages/Assignment/Assignment";
+import TeacherResourcesPage from "@pages/Teacher/Resources";
 
 const routes = [
-  // Public/Home
-  {
-    path: "/",
-    Page: Home,
-    Layout: MainLayout,
-  },
+
   // Admin Panel
   {
     path: "/admin",
@@ -92,13 +90,23 @@ const routes = [
     Layout: TeacherLayout,
   },
   {
-    path: "/teacher/user/:id",
-    Page: ClassroomDetails,
+    path: "/teacher/classrooms/user/:id",
+    Page: TeacherClassrooms,
     Layout: TeacherLayout,
   },
   {
     path: "/teacher/classrooms/:id",
     Page: TeacherClassroomDetails,
+    Layout: TeacherLayout,
+  },
+  {
+    path: "/teacher/classrooms/:id/assignments",
+    Page: TeacherAssignmentPage,
+    Layout: TeacherLayout,
+  },
+  {
+    path: "/teacher/classrooms/:id/resources",
+    Page: TeacherResourcesPage,
     Layout: TeacherLayout,
   },
   // Student area

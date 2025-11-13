@@ -14,5 +14,9 @@ public interface AttendanceRepository extends JpaRepository<Attendance, String> 
 	@Query("SELECT a FROM Attendance a WHERE a.classSession.classroom.id = :classroomId")
 	java.util.List<Attendance> findAllByClassroomId(@Param("classroomId") String classroomId);
 
+	// Fetch attendances for a specific class session and join-fetch the student to avoid lazy-loading / N+1
+	@Query("SELECT a FROM Attendance a LEFT JOIN FETCH a.student s WHERE a.classSession.id = :classSessionId")
+	java.util.List<Attendance> findAllByClassSessionIdWithStudent(@Param("classSessionId") String classSessionId);
+
 	void deleteByClassSessionId(String classSessionId);
 }

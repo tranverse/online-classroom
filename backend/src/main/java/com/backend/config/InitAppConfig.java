@@ -35,8 +35,8 @@ public class InitAppConfig implements ApplicationRunner {
     @Override
     public void run(ApplicationArguments args) throws Exception {
         createUserIfNotExist(email, Role.ADMIN);
-        createUserIfNotExist("hnbt03@gmail.com", Role.STUDENT);
-        createUserIfNotExist("tranho30122@gmail.com", Role.TEACHER);
+        createUserIfNotExist("student@gmail.com", Role.STUDENT);
+        createUserIfNotExist("teacher@gmail.com", Role.TEACHER);
     }
 
     public void createUserIfNotExist(String email, Role role) {

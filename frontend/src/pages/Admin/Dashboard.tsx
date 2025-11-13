@@ -65,11 +65,15 @@ export const AdminDashboard: React.FC = () => {
 
   if (!stats) return null;
 
-  const attendanceSuccessRate =
-    (stats.attendanceStats.present / stats.attendanceStats.total) * 100;
-  const suspiciousRate =
-    (stats.attendanceStats.suspicious / stats.attendanceStats.total) * 100;
+  const total = stats.attendanceStats.total || 0;
 
+  const attendanceSuccessRate =
+    total > 0 ? (stats.attendanceStats.present / total) * 100 : 0;
+
+  const suspiciousRate =
+    total > 0 ? (stats.attendanceStats.suspicious / total) * 100 : 0;
+
+  console.log(stats);
   return (
     <div className="p-6">
       <h1 className="text-2xl font-semibold text-gray-900 mb-6">Dashboard</h1>

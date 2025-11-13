@@ -27,6 +27,7 @@ export interface Session {
   sessionType?: "LARGE_CLASS" | "SMALL_CLASS" | "ONE_TO_ONE";
   note?: string;
   link?: string;
+  sessionStatus?: "SCHEDULED" | "IN_PROGRESS" | "COMPLETED" | "CANCELLED";
 }
 
 export interface Attendance {

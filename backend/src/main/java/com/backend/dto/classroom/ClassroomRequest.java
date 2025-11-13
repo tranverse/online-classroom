@@ -1,8 +1,8 @@
 package com.backend.dto.classroom;
 
 import com.backend.model.User;
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.persistence.ManyToOne;
-import jakarta.validation.constraints.FutureOrPresent;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.AccessLevel;
@@ -21,10 +21,10 @@ public class ClassroomRequest {
     @NotBlank(message = "INVALID_NAME")
     String name;
 
-    @FutureOrPresent(message = "INVALID_DATE")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     LocalDate startDate;
 
-    @FutureOrPresent(message = "INVALID_DATE")
+    @JsonFormat(pattern = "yyyy-MM-dd")
     LocalDate endDate;
 
     @NotNull(message = "INVALID_QUANTITY")

@@ -1,7 +1,11 @@
 package com.backend.controller;
 
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.Collectors;
+
+import com.backend.service.ClassroomService;
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import com.backend.repository.UserRepository;
@@ -53,6 +57,7 @@ public class TeacherController {
     ClassSessionMapper classSessionMapper;
     UserMapper userMapper;
     UserRepository userRepository;
+    ClassroomService classroomService;
 
     @GetMapping("/classes")
     public ResponseEntity<ApiResponse<List<ClassroomResponse>>> getTeacherClasses(@org.springframework.web.bind.annotation.RequestParam(value = "userId", required = false) String userId) {
@@ -189,6 +194,16 @@ public class TeacherController {
         } catch (Exception ex) {
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<List<ClassroomResponse>>builder().success(false).message("Failed to fetch teacher classes").build());
         }
+    }
+
+    @GetMapping("/classes/{id}/details")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getClassDetails(@PathVariable String id) {
+        var classResp = classroomService.getClassroom(id);
+        var students = classroomService.getStudentsForClassroom(id);
+        Map<String, Object> body = new HashMap<>();
+        body.put("classroom", classResp);
+        body.put("students", students);
+        return ResponseEntity.ok(ApiResponse.<Map<String, Object>>builder().code("admin-class-details").message("Class details").data(body).build());
     }
 
 }

@@ -2,6 +2,8 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AdminService } from "@services/admin.service";
 import { DataTable } from "@components/DataTable";
+import TeacherService from "@services/teacher.service";
+import authMemory from "@services/authMemory";
 
 const TeacherClassroomDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -14,7 +16,7 @@ const TeacherClassroomDetails: React.FC = () => {
     const load = async () => {
       setLoading(true);
       try {
-        const resp = await AdminService.getClassroomDetails(id);
+        const resp = await TeacherService.getClassroomDetails(id);
         setData(resp?.data || resp);
       } catch (err) {
         console.error("Failed to load classroom details", err);
@@ -43,21 +45,10 @@ const TeacherClassroomDetails: React.FC = () => {
       {
         key: "enrollDate",
         title: "Enroll Date",
-        render: (r: any) => r.enrollDate || "-",
-      },
-      {
-        key: "actions",
-        title: "Actions",
-        render: (r: any) => (
-          <div className="flex items-center space-x-2">
-            <button
-              className="text-blue-600 hover:text-blue-800"
-              onClick={() => navigate(`/admin/users/${r.student?.id}`)}
-            >
-              View user
-            </button>
-          </div>
-        ),
+        render: (r: any) =>
+          r.enrollDate
+            ? new Date(r.enrollDate).toLocaleDateString("en-GB")
+            : "-",
       },
     ],
     [navigate]
@@ -65,23 +56,52 @@ const TeacherClassroomDetails: React.FC = () => {
 
   if (!id) return <div className="p-6">No classroom id provided</div>;
 
+  const handleAssignmentClick = () => {
+    navigate(`/teacher/classrooms/${id}/assignments`);
+  };
+
   return (
     <div className="p-6">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
           <h1 className="text-2xl font-semibold">Classroom (Teacher)</h1>
           <p className="text-sm text-gray-600">{classroom?.name || "-"}</p>
         </div>
-        <div>
+
+        <div className="flex items-center space-x-3">
+          {/* Nút Assignment */}
+          <button
+            onClick={handleAssignmentClick}
+            disabled={classroom?.status === "COMPLETED"}
+            className={`px-4 py-2 text-sm rounded-md shadow ${
+              classroom?.status === "COMPLETED"
+                ? "bg-gray-300 text-gray-600 cursor-not-allowed"
+                : "bg-emerald-500 text-white hover:bg-emerald-600"
+            }`}
+          >
+            Assignment
+          </button>
+
+          {/* Nút Resources */}
+          <button
+            onClick={() => navigate(`/teacher/classrooms/${id}/resources`)}
+            className="px-4 py-2 text-sm rounded-md shadow bg-blue-600 text-white hover:bg-blue-700"
+          >
+            Resources
+          </button>
+
+          {/* Nút Back */}
           <button
             onClick={() => navigate(-1)}
-            className="px-3 py-2 text-sm bg-gray-100 rounded-md"
+            className="px-3 py-2 text-sm bg-gray-100 rounded-md hover:bg-gray-200"
           >
             Back
           </button>
         </div>
       </div>
 
+      {/* Info Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
         <div className="p-4 bg-white border rounded-md">
           <div className="text-xs text-gray-500">Status</div>
@@ -97,6 +117,7 @@ const TeacherClassroomDetails: React.FC = () => {
         </div>
       </div>
 
+      {/* Students Table */}
       <div className="bg-white border rounded-md p-4">
         <h2 className="text-lg font-medium mb-4">
           Students ({students.length})

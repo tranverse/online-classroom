@@ -184,7 +184,7 @@ const AttendanceCapture: React.FC<Props> = ({
           }`;
 
       // Step A: call face-service /analyze to show detection + liveness phases
-      const faceServiceBase = "http://localhost:5001"
+      const faceServiceBase = "http://localhost:5001";
       // Normalize common dev host 0.0.0.0 -> localhost because browsers cannot connect to 0.0.0.0
       const normalizeHost = (u: string) => {
         if (!u) return u;
@@ -242,7 +242,7 @@ const AttendanceCapture: React.FC<Props> = ({
         capturingRef.current = false;
         return;
       }
-      console.log("analyzeResp", analyzeResp)
+      console.log("analyzeResp", analyzeResp);
       // update UI based on analyze response
       const det = analyzeResp.detection || {};
       const liv = analyzeResp.liveness || {};
@@ -281,7 +281,7 @@ const AttendanceCapture: React.FC<Props> = ({
       } else if (json && json.data) {
         try {
           const info = json.data;
-          console.log("info", info)
+          console.log("info", info);
           // try to extract analysis metrics (backend may return object or note string)
           let analyzeMap: Record<string, any> = {};
           try {
@@ -314,7 +314,7 @@ const AttendanceCapture: React.FC<Props> = ({
           } catch (e) {
             // ignore parse failures
           }
-          console.log("analyzeMap", analyzeMap)
+          console.log("analyzeMap", analyzeMap);
           // determine detection status
           const descLenRaw =
             analyzeMap["descriptor_len"] ??
@@ -519,9 +519,7 @@ const AttendanceCapture: React.FC<Props> = ({
             motionDetected ? "text-green-600" : "text-gray-500"
           }`}
         >
-          {motionDetected
-            ? "Đang phát hiện chuyển động"
-            : "Chưa phát hiện chuyển động"}
+          {motionDetected ? "Motion detected" : "No motion detected"}
         </span>
       </div>
 
@@ -597,7 +595,7 @@ const AttendanceCapture: React.FC<Props> = ({
 
         {/* Hướng dẫn */}
         <div className="absolute bottom-4 w-full text-center text-white text-sm font-medium drop-shadow-md">
-          Giữ khuôn mặt trong khung tròn và đảm bảo ánh sáng tốt
+          Keep your face inside the circle and ensure good lighting{" "}
         </div>
       </div>
 
