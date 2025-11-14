@@ -32,9 +32,12 @@ import StudentAssignments from "@pages/Student/Assignments";
 import TeacherClassrooms from "@pages/Teacher/TeacherClassrooms";
 import TeacherAssignmentPage from "@pages/Assignment/Assignment";
 import TeacherResourcesPage from "@pages/Teacher/Resources";
+import StudentClassroomsPage from "@pages/Student/Classrooms";
+import StudentClassroomDetails from "@pages/Student/ClassroomDetails";
+import TeacherProfile from "@pages/Teacher/TeacherProfile";
+import TeacherFile from "@pages/Teacher/Files";
 
 const routes = [
-
   // Admin Panel
   {
     path: "/admin",
@@ -109,6 +112,16 @@ const routes = [
     Page: TeacherResourcesPage,
     Layout: TeacherLayout,
   },
+  {
+    path: "/teacher/profile",
+    Page: TeacherProfile,
+    Layout: TeacherLayout,
+  },
+  {
+    path: "/teacher/files",
+    Page: TeacherFile,
+    Layout: TeacherLayout,
+  },
   // Student area
   {
     path: "/student",
@@ -127,7 +140,12 @@ const routes = [
   },
   {
     path: "/student/classrooms/user/:id",
-    Page: ClassroomsPage,
+    Page: StudentClassroomsPage,
+    Layout: StudentLayout,
+  },
+  {
+    path: "/student/classrooms/detail/user/:id",
+    Page: StudentClassroomDetails,
     Layout: StudentLayout,
   },
   {

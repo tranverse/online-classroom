@@ -139,6 +139,15 @@ public class TeacherService {
     }
 
     @Transactional
+    public ClassSession updateClassSessionInProgress(String sessionId) {
+        ClassSession session = sessionRepository.findById(sessionId)
+                .orElseThrow(() -> new ResourceNotFoundException("Session not found"));
+        validateTeacherClassAccess(session.getClassroom().getId());
+        session.setSessionStatus(ClassSessionStatus.IN_PROGRESS);
+        return sessionRepository.save(session);
+    }
+
+    @Transactional
     public void deleteClassSession(String sessionId) {
         ClassSession session = sessionRepository.findById(sessionId)
                 .orElseThrow(() -> new ResourceNotFoundException("Session not found"));

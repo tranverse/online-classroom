@@ -3,7 +3,13 @@ import TeacherService from "../../services/teacher.service";
 import ClassroomService from "../../services/classroom.service";
 import authMemory from "@services/authMemory";
 import { Link } from "react-router-dom";
-import { FaChalkboardTeacher, FaClock, FaDoorOpen, FaUserGraduate } from "react-icons/fa";
+import {
+  FaChalkboardTeacher,
+  FaClock,
+  FaDoorOpen,
+  FaUserGraduate,
+} from "react-icons/fa";
+import { addMinutes, differenceInMinutes, parseISO } from "date-fns";
 
 const TeacherDashboard: React.FC = () => {
   const [classrooms, setClassrooms] = useState<any[]>([]);
@@ -28,7 +34,7 @@ const TeacherDashboard: React.FC = () => {
           const perClassSessions = await Promise.all(
             (cls || []).map(async (c: any) => {
               try {
-                const r = await TeacherService.getClassSessions(c.id);
+                const r = await TeacherService.getUpcomingSessions(c.id);
                 return r?.data || r || [];
               } catch (e) {
                 return c.sessions || c.upcomingSessions || [];
@@ -74,6 +80,14 @@ const TeacherDashboard: React.FC = () => {
       mounted = false;
     };
   }, []);
+
+  const handleUpdateSessionStatus = async (classSessionId: string) => {
+    let cls: any[] = [];
+    try {
+      const resp = await TeacherService.updateInProgress(classSessionId);
+      console.log(resp);
+    } catch (e) {}
+  };
 
   return (
     <div className="w-full h-full flex justify-center items-start p-6">
@@ -128,13 +142,43 @@ const TeacherDashboard: React.FC = () => {
                           End: {end}
                         </div>
                       </div>
+                      {(() => {
+                        const now = new Date();
 
-                      <Link
-                        to={`/classroom/online/${s.id}`}
-                        className="mt-3 md:mt-0 px-5 py-2 text-sm bg-emerald-500 text-white rounded-lg shadow hover:bg-emerald-600 hover:shadow-md transition-all"
-                      >
-                        Open
-                      </Link>
+                        // Dùng ISO string từ backend
+                        const startTime = s.startTime
+                          ? new Date(s.startTime)
+                          : null;
+                        const endTime = s.endTime
+                          ? new Date(s.endTime)
+                          : addMinutes(startTime, 90);
+
+                        const diffStart = differenceInMinutes(startTime, now);
+
+                        const isBeforeAndNearStart =
+                          diffStart <= 10 && diffStart >= 0;
+                        const isDuringClass =
+                          now >= startTime && now <= endTime;
+
+                        const canJoin = isBeforeAndNearStart || isDuringClass;
+
+                        return (
+                          <Link
+                            to={canJoin ? `/classroom/online/${s.id}` : "#"}
+                            className={`mt-3 md:mt-0 px-5 py-2 text-sm rounded-lg shadow transition-all ${
+                              canJoin
+                                ? "bg-emerald-500 text-white hover:bg-emerald-600 hover:shadow-md"
+                                : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                            }`}
+                            onClick={(e) => {
+                              if (!canJoin) e.preventDefault();
+                              handleUpdateSessionStatus(s.id);
+                            }}
+                          >
+                            {canJoin ? "Join Now" : "Not Yet"}
+                          </Link>
+                        );
+                      })()}
                     </div>
                   );
                 })

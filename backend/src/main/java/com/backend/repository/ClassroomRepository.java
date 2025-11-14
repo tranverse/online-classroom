@@ -1,5 +1,6 @@
 package com.backend.repository;
 
+import com.backend.enums.ClassroomStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
@@ -14,4 +15,6 @@ public interface ClassroomRepository extends JpaRepository<Classroom, String> {
 	List<Classroom> findAllByTeacherId(String teacherId);
 
 	List<Classroom> findAllByIsDeletedFalse();
+
+	List<Classroom> findByStatusIn(List<ClassroomStatus> status);
 }

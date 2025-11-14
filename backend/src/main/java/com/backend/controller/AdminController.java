@@ -170,6 +170,30 @@ public class AdminController {
         return ResponseEntity.ok(ApiResponse.builder().code("admin-class-invite").message("Invites processed").data(results).build());
     }
 
+    @PostMapping("/classes/{id}/remove")
+    public ResponseEntity<ApiResponse<?>> removeFromClass(
+            @PathVariable String id,
+            @RequestBody String userId) {
+
+        List<String> removedUsers = new ArrayList<>();
+
+            try {
+                // Gọi service để xóa
+                classroomService.removeStudentClassroom(userId, id);
+            } catch (Exception ex) {
+                // swallow individual errors và tiếp tục
+            }
+
+        return ResponseEntity.ok(
+                ApiResponse.builder()
+                        .code("admin-class-remove")
+                        .message("Remove processed")
+                        .data("")
+                        .build()
+        );
+    }
+
+
     // Sessions
     @GetMapping("/classes/{id}/sessions")
     public ResponseEntity<ApiResponse<List<ClassSessionResponse>>> getClassSessions(@PathVariable String id) {

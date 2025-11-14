@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from "react";
 import StudentService from "@services/student.service";
 import { Link } from "react-router-dom";
+import { differenceInMinutes, parseISO } from "date-fns"; // cài date-fns nếu chưa có
+
 import {
   FaChalkboardTeacher,
   FaCalendarAlt,
@@ -95,12 +97,41 @@ const StudentDashboard: React.FC = () => {
                     </div>
                   </div>
 
-                  <Link
-                    to={`/classroom/online/${s.id}`}
-                    className="mt-3 md:mt-0 px-5 py-2 text-sm bg-emerald-500 text-white rounded-lg shadow hover:bg-emerald-600 hover:shadow-md transition-all"
-                  >
-                    Join Now
-                  </Link>
+                  {(() => {
+                    const now = new Date();
+
+                    // Dùng ISO string từ backend
+                    const startTime = s.startTime
+                      ? new Date(s.startTime)
+                      : null;
+                    const endTime = s.endTime
+                      ? new Date(s.endTime)
+                      : addMinutes(startTime, 90);
+
+                    const diffStart = differenceInMinutes(startTime, now);
+
+                    const isBeforeAndNearStart =
+                      diffStart <= 10 && diffStart >= 0;
+                    const isDuringClass = now >= startTime && now <= endTime;
+
+                    const canJoin = isBeforeAndNearStart || isDuringClass;
+
+                    return (
+                      <Link
+                        to={canJoin ? `/classroom/online/${s.id}` : "#"}
+                        className={`mt-3 md:mt-0 px-5 py-2 text-sm rounded-lg shadow transition-all ${
+                          canJoin
+                            ? "bg-emerald-500 text-white hover:bg-emerald-600 hover:shadow-md"
+                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                        }`}
+                        onClick={(e) => {
+                          if (!canJoin) e.preventDefault();
+                        }}
+                      >
+                        {canJoin ? "Join Now" : "Not Yet"}
+                      </Link>
+                    );
+                  })()}
                 </div>
               ))
             ) : (

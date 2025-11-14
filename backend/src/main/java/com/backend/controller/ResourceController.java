@@ -141,7 +141,15 @@ public class ResourceController {
     @GetMapping
     @PreAuthorize("hasAnyRole('STUDENT','TEACHER','ADMIN')")
     public ResponseEntity<ApiResponse<java.util.List<com.backend.dto.resource.ResourceResponse>>> listResources(@RequestParam(required = false) String folderId) {
-        // support classroomId to fetch resources for a class
+        String email = SecurityContextHolder.getContext().getAuthentication().getName();
+        User authUser = userRepository.findByEmail(email).orElse(null);
+        if (authUser == null) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                    .body(ApiResponse.<java.util.List<com.backend.dto.resource.ResourceResponse>>builder()
+                            .success(false)
+                            .message("User not found")
+                            .build());
+        }
         String classroomId = null;
         try {
             // if a query param classroomId present, it will be picked up automatically by Spring if declared; read from request param instead
@@ -154,7 +162,7 @@ public class ResourceController {
             String cid = folderId.substring("classroom:".length());
             list = resourceService.listByClassroom(cid);
         } else {
-            list = resourceService.listByFolder(folderId);
+            list = resourceService.listByFolder(folderId, authUser.getId());
         }
         java.util.List<com.backend.dto.resource.ResourceResponse> dto = list.stream().map(com.backend.dto.resource.ResourceResponse::from).toList();
         return ResponseEntity.ok(ApiResponse.<java.util.List<com.backend.dto.resource.ResourceResponse>>builder().data(dto).build());

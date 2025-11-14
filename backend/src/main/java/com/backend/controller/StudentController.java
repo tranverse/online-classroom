@@ -2,6 +2,11 @@ package com.backend.controller;
 
 import java.util.*;
 
+import com.backend.enums.ClassroomStatus;
+import com.backend.model.Attendance;
+import com.backend.model.ClassSession;
+import com.backend.model.Classroom;
+import com.backend.repository.*;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
@@ -9,12 +14,7 @@ import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestPart;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -22,14 +22,10 @@ import com.backend.dto.ApiResponse;
 import com.backend.enums.Role;
 import com.backend.model.User;
 import com.backend.util.FaceUtils;
-import com.backend.repository.UserRepository;
 import com.backend.mapper.ClassroomMapper;
 import com.backend.dto.classroom.ClassroomResponse;
 import com.backend.mapper.ClassSessionMapper;
 import com.backend.dto.classSession.ClassSessionResponse;
-import com.backend.repository.ClassroomRepository;
-import com.backend.repository.ClassSessionRepository;
-import com.backend.repository.StudentClassroomRepository;
 
 import lombok.AccessLevel;
 import lombok.RequiredArgsConstructor;
@@ -52,6 +48,7 @@ public class StudentController {
     ClassSessionMapper classSessionMapper;
     StudentClassroomRepository studentClassroomRepository;
     ClassroomMapper classroomMapper;
+    private final AttendanceRepository attendanceRepository;
 
     @PostMapping(value = "/face/enroll", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasRole('STUDENT')")
@@ -219,43 +216,66 @@ public class StudentController {
     // GET /api/student/classrooms/{id} - student-facing classroom details
     @GetMapping("/classrooms/{id}")
     @PreAuthorize("hasRole('STUDENT')")
-    public ResponseEntity<ApiResponse<java.util.Map<String, Object>>> getClassroomDetails(@org.springframework.web.bind.annotation.PathVariable String id) {
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getClassroomDetails(@PathVariable String id) {
         try {
             String email = SecurityContextHolder.getContext().getAuthentication().getName();
             User authUser = userRepository.findByEmail(email).orElse(null);
-            if (authUser == null) return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("User not found").build());
+            if (authUser == null)
+                return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
+                        .body(ApiResponse.<Map<String,Object>>builder().success(false).message("User not found").build());
 
-            // verify student is enrolled in this classroom
             boolean enrolled = studentClassroomRepository.existsByStudentIdAndClassroomId(authUser.getId(), id);
             if (!enrolled) {
-                return ResponseEntity.status(HttpStatus.FORBIDDEN).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("Forbidden").build());
+                return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                        .body(ApiResponse.<Map<String,Object>>builder().success(false).message("Forbidden").build());
             }
 
-            com.backend.model.Classroom classroom = classroomRepository.findById(id).orElse(null);
-            if (classroom == null) return ResponseEntity.status(HttpStatus.NOT_FOUND).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("Classroom not found").build());
+            Classroom classroom = classroomRepository.findById(id).orElse(null);
+            if (classroom == null)
+                return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                        .body(ApiResponse.<Map<String,Object>>builder().success(false).message("Classroom not found").build());
 
-            java.util.Map<String,Object> out = new java.util.HashMap<>();
+            Map<String,Object> out = new HashMap<>();
             out.put("classroom", classroomMapper.toClassroomResponse(classroom));
 
-            java.util.List<com.backend.model.StudentClassroom> links = studentClassroomRepository.findByClassroomId(id);
-            java.util.List<java.util.Map<String,Object>> students = new java.util.ArrayList<>();
-            if (links != null) {
-                for (com.backend.model.StudentClassroom link : links) {
-                    if (link.getStudent() == null) continue;
-                    java.util.Map<String,Object> s = new java.util.HashMap<>();
-                    s.put("id", link.getStudent().getId());
-                    s.put("name", link.getStudent().getName());
-                    s.put("email", link.getStudent().getEmail());
-                    s.put("avatar", link.getStudent().getAvatar());
-                    students.add(s);
-                }
+            // Lấy attendance của student hiện tại cho lớp này
+            List<Attendance> attendances = attendanceRepository
+                    .findByStudentAndClassroom(authUser.getId(), id);
+            List<Map<String,Object>> attList = new ArrayList<>();
+            for (Attendance a : attendances) {
+                Map<String,Object> att = new HashMap<>();
+                att.put("id", a.getId());
+                att.put("sessionId", a.getClassSession().getId());
+                att.put("sessionTitle", a.getClassSession().getTitle());
+                att.put("status", a.getStatus());
+                att.put("attendanceTime", a.getAttendanceTime());
+                att.put("isPassed", a.getIsPassed());
+                att.put("note", a.getNote());
+                attList.add(att);
             }
-            out.put("students", students);
+            out.put("attendance", attList);
 
-            return ResponseEntity.ok(ApiResponse.<java.util.Map<String,Object>>builder().message("classroom-details").data(out).build());
+            List<ClassSession> classSessions = classSessionRepository.findByClassroomId(id);
+            List<Map<String, Object>> sess = new ArrayList<>();
+            for (ClassSession cs : classSessions) {
+                Map<String,Object> att = new HashMap<>();
+                att.put("id", cs.getId());
+                att.put("title", cs.getTitle());
+                att.put("startTime", cs.getStartTime());
+                att.put("endTime", cs.getEndTime());
+                att.put("link", cs.getLink());
+                att.put("sessionType", cs.getSessionType());
+                att.put("sessionStatus", cs.getSessionStatus());
+                sess.add(att);
+            }
+
+            out.put("classSessions", sess);
+
+            return ResponseEntity.ok(ApiResponse.<Map<String,Object>>builder().message("classroom-details").data(out).build());
         } catch (Exception ex) {
             log.error("Failed to fetch classroom details", ex);
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<java.util.Map<String,Object>>builder().success(false).message("Failed").build());
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.<Map<String,Object>>builder().success(false).message("Failed").build());
         }
     }
 
@@ -459,6 +479,35 @@ public class StudentController {
             // For local debugging return exception message in response body. Remove in production.
             String msg = ex.getMessage() == null ? "Upload failed" : ex.getMessage();
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<Map<String,Object>>builder().success(false).message("Upload failed: " + msg).build());
+        }
+    }
+    @PostMapping("/face/verify-quality")
+    @PreAuthorize("hasRole('STUDENT')")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> verifyFaceQuality(@RequestBody Map<String, Object> payload) {
+        try {
+            String imageBase64 = String.valueOf(payload.get("imageBase64"));
+            List<Double> descriptor = faceRecognitionService.extractDescriptor(imageBase64);
+
+            Map<String, Object> result = new HashMap<>();
+            if (descriptor != null && !descriptor.isEmpty()) {
+                result.put("valid", true);
+                result.put("message", "Face detected successfully. This image is suitable for enrollment.");
+            } else {
+                result.put("valid", false);
+                result.put("message", "No valid face detected. Please ensure good lighting, face the camera directly, and avoid obstructions.");
+            }
+
+            return ResponseEntity.ok(ApiResponse.<Map<String, Object>>builder()
+                    .message("verify-quality")
+                    .data(result)
+                    .build());
+        } catch (Exception e) {
+            log.error("verifyFaceQuality failed", e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ApiResponse.<Map<String, Object>>builder()
+                            .success(false)
+                            .message("Failed to verify face quality. Please try again.")
+                            .build());
         }
     }
 

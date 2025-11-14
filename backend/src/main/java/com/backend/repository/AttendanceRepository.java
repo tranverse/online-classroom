@@ -5,6 +5,9 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import com.backend.model.Attendance;
+import org.w3c.dom.stylesheets.LinkStyle;
+
+import java.util.List;
 
 public interface AttendanceRepository extends JpaRepository<Attendance, String> {
 	java.util.List<Attendance> findAllByClassSessionId(String classSessionId);
@@ -19,4 +22,14 @@ public interface AttendanceRepository extends JpaRepository<Attendance, String> 
 	java.util.List<Attendance> findAllByClassSessionIdWithStudent(@Param("classSessionId") String classSessionId);
 
 	void deleteByClassSessionId(String classSessionId);
+
+	Attendance findByClassSessionIdAndStudentId(String classSessionId, String studentId);
+
+	@Query("SELECT a FROM Attendance a " +
+			"JOIN a.classSession cs " +
+			"WHERE a.student.id = :studentId AND cs.classroom.id = :classroomId")
+	List<Attendance> findByStudentAndClassroom(
+			@Param("studentId") String studentId,
+			@Param("classroomId") String classroomId
+	);
 }

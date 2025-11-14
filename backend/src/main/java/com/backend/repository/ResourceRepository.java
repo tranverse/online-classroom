@@ -9,4 +9,6 @@ import com.backend.model.Resource;
 
 public interface ResourceRepository extends JpaRepository<Resource, String> {
     List<Resource> findAllByFolder(Folder folder);
+
+    List<Resource>  findAllByUploadedById(String uploadedById);
 }

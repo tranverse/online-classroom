@@ -3,6 +3,7 @@ package com.backend.repository;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import com.backend.enums.ClassSessionStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -19,4 +20,15 @@ public interface ClassSessionRepository extends JpaRepository<ClassSession, Stri
 
     @Query("SELECT s FROM ClassSession s WHERE s.classroom.id = :classroomId AND s.endTime < :now ORDER BY s.startTime DESC")
     List<ClassSession> findPastSessionsByClassroom(@Param("classroomId") String classroomId, @Param("now") LocalDateTime now);
+
+    List<ClassSession> findByClassroomId(String classroomId);
+
+
+
+    @Query("SELECT cs FROM ClassSession cs " +
+            "WHERE cs.endTime < :now " +
+            "AND cs.sessionStatus NOT IN :excludedStatuses")
+    List<ClassSession> findSessionsToMarkMissed(@Param("now") LocalDateTime now,
+                                                @Param("excludedStatuses") List<ClassSessionStatus> excludedStatuses);
 }
+

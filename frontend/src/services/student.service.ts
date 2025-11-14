@@ -221,6 +221,7 @@ export const StudentService = {
       return null;
     }
   },
+
   enrollSelf: async (file: File) => {
     try {
       const form = new FormData();
@@ -230,6 +231,12 @@ export const StudentService = {
     } catch (err: any) {
       return null;
     }
+  },
+  verifyFaceQuality: async (imageBase64: string) => {
+    const res = await axios.post("/api/student/face/verify-quality", {
+      imageBase64,
+    });
+    return res.data?.data;
   },
 };
 

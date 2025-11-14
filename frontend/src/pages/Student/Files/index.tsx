@@ -16,12 +16,10 @@ const FilesPage: React.FC = () => {
 
   const load = useCallback(async (folderId?: string | null) => {
     try {
-      console.log("FilesPage: loading resources for folderId=", folderId);
       const f = await FilesService.listFolders();
-      console.log("FilesPage: folders response", f);
       setFolders(f || []);
+
       const r = await FilesService.listResources(folderId || undefined);
-      console.log("FilesPage: resources response", r);
       setResources(r || []);
     } catch (err) {
       console.error("Failed to load files", err);
@@ -36,46 +34,50 @@ const FilesPage: React.FC = () => {
     setActiveFolder((cur) => (cur === id ? null : id));
   };
 
-  const onFolderCreated = async () => {
-    await load(activeFolder);
-  };
-
-  const onUploaded = async () => {
-    await load(activeFolder);
-  };
+  const onFolderCreated = async () => load(activeFolder);
+  const onUploaded = async () => load(activeFolder);
 
   return (
-    <div className="p-6">
-      <StudentHeader />
-      <div className="mt-6">
-        <div className="flex items-center justify-between mb-4">
-          <CreateFolderModal
-            parentId={activeFolder ?? undefined}
-            onCreated={onFolderCreated}
-          />
-          <UploadButton
-            folderId={activeFolder ?? undefined}
-            onUploaded={onUploaded}
-          />
+    <div className="p-6 max-w-7xl mx-auto">
+      {/* Header */}
+      <div className="mb-6">
+        <StudentHeader />
+      </div>
+
+      {/* Control Panel */}
+      <div className="flex items-center justify-between bg-white shadow-md border border-slate-200 rounded-xl p-4 mb-6">
+        <CreateFolderModal
+          parentId={activeFolder ?? undefined}
+          onCreated={onFolderCreated}
+        />
+        <UploadButton
+          folderId={activeFolder ?? undefined}
+          onUploaded={onUploaded}
+        />
+      </div>
+
+      {/* Breadcrumb */}
+      {activeFolder && (
+        <div className="mb-4 bg-slate-50 border border-slate-200 rounded-lg p-3">
+          <nav className="text-sm text-slate-600 flex items-center gap-2">
+            <button
+              className="text-blue-600 hover:underline"
+              onClick={() => setActiveFolder(null)}
+            >
+              Root
+            </button>
+
+            <span className="text-slate-400">/</span>
+
+            <span className="font-medium text-slate-800">
+              {folders.find((x) => x.id === activeFolder)?.name || "Folder"}
+            </span>
+          </nav>
         </div>
+      )}
 
-        {activeFolder ? (
-          <div className="mb-4">
-            <nav className="text-sm text-slate-600">
-              <button
-                className="underline mr-2"
-                onClick={() => setActiveFolder(null)}
-              >
-                Root
-              </button>
-              /{" "}
-              <span className="font-medium ml-2">
-                {folders.find((x) => x.id === activeFolder)?.name || "Folder"}
-              </span>
-            </nav>
-          </div>
-        ) : null}
-
+      {/* Files list */}
+      <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4">
         <FileList
           folders={folders}
           files={resources}

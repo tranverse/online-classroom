@@ -67,8 +67,8 @@ public class ResourceService {
         }
     }
 
-    public List<Resource> listByFolder(String folderId) {
-        if (folderId == null) return resourceRepository.findAll();
+    public List<Resource> listByFolder(String folderId, String userId) {
+        if (folderId == null) return resourceRepository.findAllByUploadedById(userId);
         Optional<Folder> f = folderRepository.findById(folderId);
         return f.map(resourceRepository::findAllByFolder).orElseGet(List::of);
     }

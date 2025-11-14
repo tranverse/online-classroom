@@ -14,6 +14,7 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -25,16 +26,30 @@ public class StudentFaceService {
 
     public StudentFaceDescriptor enrollDescriptor(String userId, List<Double> descriptor) {
         try {
-            User u = userRepository.findById(userId).orElseThrow();
-            StudentFaceDescriptor d = new StudentFaceDescriptor();
-            d.setStudent(u);
+            User u = userRepository.findById(userId)
+                    .orElseThrow(() -> new RuntimeException("User not found"));
+
+            // Check if descriptor already exists for this student
+            Optional<StudentFaceDescriptor> existingOpt = descriptorRepository.findByStudentId(userId);
+
+            StudentFaceDescriptor d;
+            if (existingOpt.isPresent()) {
+                d = existingOpt.get();
+            } else {
+                d = new StudentFaceDescriptor();
+                d.setStudent(u);
+            }
+
+            // Set/update descriptor
             d.setDescriptorJson(mapper.writeValueAsString(descriptor));
             d.setCreatedAt(LocalDateTime.now());
+
             return descriptorRepository.save(d);
         } catch (Exception ex) {
             throw new RuntimeException("Failed to enroll descriptor", ex);
         }
     }
+
 
     public List<List<Double>> getDescriptorsForUser(String userId) {
         try {

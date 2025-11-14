@@ -2,6 +2,8 @@ package com.backend.repository;
 
 import java.util.List;
 
+import com.backend.model.Classroom;
+import com.backend.model.User;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import com.backend.model.StudentClassroom;
@@ -17,4 +19,6 @@ public interface StudentClassroomRepository extends JpaRepository<StudentClassro
 
     // find all links for a given student
     List<StudentClassroom> findByStudentId(String studentId);
+
+    StudentClassroom findByStudentAndClassroom(User student, Classroom classroom);
 }

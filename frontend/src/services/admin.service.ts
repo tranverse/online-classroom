@@ -1,4 +1,4 @@
-import axios from "../tools/axios.tool";
+import axios, { axiosInstance, service } from "../tools/axios.tool";
 import {
   User,
   Classroom,
@@ -35,7 +35,7 @@ export const AdminService = {
       const resp = await axios.get(`${USER_URL}`, {
         params: { page, pageSize },
       });
-      console.log("resp", resp)
+      console.log("resp", resp);
       // backend commonly wraps responses as { code, message, data } where data
       // may itself be the paginated object. Support both shapes and fall back
       // to a safe empty paginated response.
@@ -186,5 +186,12 @@ export const AdminService = {
       status,
     });
     return data;
+  },
+
+  removeStudentFromClassroom: async (classroomId: string, userId: string) => {
+    console.log("userId", userId)
+    return service(
+      axios.post(`${BASE_URL}/classes/${classroomId}/remove`, userId)
+    );
   },
 };

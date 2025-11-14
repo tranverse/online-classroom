@@ -139,7 +139,7 @@ const FileList: React.FC<{
                 className="flex items-center justify-between gap-3 p-3 bg-white rounded-md shadow-sm border hover:bg-slate-50 cursor-pointer"
               >
                 <div className="flex items-center gap-3">
-                  <FileText className="w-6 h-6 text-amber-500" />
+                  <FileText className="w-6 h-6 text-amber-500 line-clamp-2" />
                   <div>
                     <div className="font-medium">{f.name}</div>
                     <div className="text-sm text-slate-500">

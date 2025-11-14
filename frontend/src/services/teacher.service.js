@@ -15,8 +15,11 @@ const TeacherService = {
     );
   },
   getClassroomDetails(id) {
+    return service(axiosInstance.get(`/api/teacher/classes/${id}/details`));
+  },
+  updateInProgress(classSessionId) {
     return service(
-      axiosInstance.get(`/api/teacher/classes/${id}/details`)
+      axiosInstance.put(`/api/teacher/sessions/in_progress/${classSessionId}`)
     );
   },
 };

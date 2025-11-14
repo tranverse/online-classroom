@@ -1,9 +1,12 @@
 package com.backend.service;
 
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.UUID;
 import java.util.stream.Collectors;
 
+import jakarta.transaction.Transactional;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.backend.dto.classSession.ClassSessionRequest;
@@ -37,7 +40,7 @@ public class ClassSessionService {
         // ensure defaults for missing fields
         if (classSession.getSessionStatus() == null) {
             // default to IN_PROGRESS to match frontend 'inprogress' semantics
-            classSession.setSessionStatus(ClassSessionStatus.IN_PROGRESS);
+            classSession.setSessionStatus(ClassSessionStatus.UPCOMING);
         }
         if (classSession.getSessionType() == null) {
             classSession.setSessionType(ClassSessionType.LARGE_CLASS);
@@ -90,5 +93,27 @@ public class ClassSessionService {
 
     public List<ClassSessionResponse> getAllClassSessions() {
         return classSessionRepository.findAll().stream().map(classSessionMapper::toClassSessionResponse).collect(Collectors.toList());
+    }
+
+    @Scheduled(fixedRate = 60000) // 60 giây
+    @Transactional
+    public void updateMissedSessions() {
+        LocalDateTime now = LocalDateTime.now();
+        List<ClassSessionStatus> excluded = List.of(
+                ClassSessionStatus.COMPLETED,
+                ClassSessionStatus.UPCOMING,
+                ClassSessionStatus.CANCELLED
+        );
+
+        List<ClassSession> sessionsToUpdate = classSessionRepository.findSessionsToMarkMissed(now, excluded);
+
+        for (ClassSession session : sessionsToUpdate) {
+            session.setSessionStatus(ClassSessionStatus.MISSED);
+        }
+
+        if (!sessionsToUpdate.isEmpty()) {
+            classSessionRepository.saveAll(sessionsToUpdate);
+            System.out.println("Updated " + sessionsToUpdate.size() + " sessions to MISSED");
+        }
     }
 }

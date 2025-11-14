@@ -5,6 +5,8 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 import com.backend.enums.ClassroomStatus;
+import com.backend.model.User;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import com.backend.dto.classroom.ClassroomRequest;
@@ -93,6 +95,33 @@ public class ClassroomService {
         studentClassroomRepository.save(studentClassroom);
         return studentClassroomMapper.toStudentClassroomResponse(studentClassroom);
     }
+    public void removeStudentClassroom(String studentId, String classroomId) {
+        System.out.println("Removing StudentClassroom mapping:");
+        System.out.println("studentId = " + studentId);
+        System.out.println("classroomId = " + classroomId);
+
+        // Tìm student & classroom
+        User student = userRepository.findById(studentId).orElseThrow(() ->
+                new AppException(ErrorCode.USER_NOT_FOUND)
+        );
+        Classroom classroom = classroomRepository.findById(classroomId).orElseThrow(() ->
+                new AppException(ErrorCode.CLASSROOM_NOT_FOUND)
+        );
+
+        // Tìm mapping
+        StudentClassroom studentClassroom = studentClassroomRepository
+                .findByStudentAndClassroom(student, classroom);
+
+        System.out.println("Found mapping: " + studentClassroom);
+
+        if (studentClassroom != null) {
+            studentClassroomRepository.delete(studentClassroom);
+            System.out.println("Deleted successfully");
+        } else {
+            System.out.println("No mapping found to delete");
+        }
+    }
+
 
     public ClassroomResponse getClassroom(String classroomId) {
         Classroom classroom = classroomRepository.findById(classroomId).orElseThrow();
@@ -128,6 +157,29 @@ public class ClassroomService {
         return null;
     }
 
+    @Scheduled(fixedRate = 60_000) // chạy mỗi 60 giây
+    @Transactional
+    public void updateClassroomStatus() {
+        LocalDate today = LocalDate.now();
 
+        // Chỉ load các lớp chưa COMPLETED hoặc CANCELLED
+        List<Classroom> classrooms = classroomRepository.findByStatusIn(List.of(ClassroomStatus.DRAFT, ClassroomStatus.ACTIVE));
+
+        for (Classroom c : classrooms) {
+            ClassroomStatus oldStatus = c.getStatus();
+            if (today.isBefore(c.getStartDate())) {
+                c.setStatus(ClassroomStatus.DRAFT);
+            } else if (!today.isAfter(c.getEndDate())) {
+                c.setStatus(ClassroomStatus.ACTIVE);
+            } else {
+                c.setStatus(ClassroomStatus.COMPLETED);
+            }
+            if (oldStatus != c.getStatus()) {
+                System.out.println("Updated classroom " + c.getName() + " from " + oldStatus + " -> " + c.getStatus());
+            }
+        }
+
+        classroomRepository.saveAll(classrooms);
+    }
 
 }

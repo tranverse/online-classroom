@@ -58,6 +58,8 @@ const AttendanceUpload: React.FC = () => {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [cameraOn, setCameraOn] = useState(false);
   const toast = useToast();
+  const [verified, setVerified] = useState(false);
+
   // NOTE: do not automatically attach classSessionId to uploads here.
   // This upload UI is intended for uploading sample images / data only.
   // If you need to persist attendance for a specific session, call
@@ -84,7 +86,9 @@ const AttendanceUpload: React.FC = () => {
       return { ok: false, reason: String(e) };
     }
   };
-
+  useEffect(() => {
+    setVerified(false);
+  }, [photoPreview]);
   // validate that a File contains a detectable face (uses client models)
   const validateImageHasFace = async (f: File) => {
     if (!modelsLoaded) return { ok: false, reason: "models_not_loaded" };
@@ -352,7 +356,7 @@ const AttendanceUpload: React.FC = () => {
     if (!detection) {
       const msg =
         "Không tìm thấy khuôn mặt. Vui lòng chụp rõ mặt, xoay đầu/dịch chuyển camera hoặc thử ảnh khác.";
-      toast?.show ? toast.show(msg, "error") : alert(msg);
+      console.log(msg);
       throw new Error("No face detected");
     }
 
@@ -362,129 +366,121 @@ const AttendanceUpload: React.FC = () => {
   const descriptorToArray = (d: Float32Array) =>
     Array.from(d as any) as number[];
 
-// primary verify flow: capture from camera (or use uploaded file), compute descriptor, send to backend verify
-const onVerify = async (e?: React.FormEvent) => {
-  e?.preventDefault();
-  if (!modelsLoaded) {
-    toast?.show
-      ? toast.show("Face models not loaded yet", "error")
-      : console.warn("Toast provider missing: Face models not loaded yet");
-    return;
-  }
-
-  try {
-    setVerifying(true);
-    let descriptor: Float32Array | null = null;
-    let imgEl: HTMLImageElement | null = null;
-
-    if (photoPreview) {
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = photoPreview;
-      await new Promise((r) => (img.onload = r));
-      imgEl = img;
-      try {
-        descriptor = await calcDescriptorFromImageEl(img);
-      } catch (e) {}
-    } else if (videoRef.current) {
-      const blobUrl = await captureFromVideo();
-      const img = new Image();
-      img.crossOrigin = "anonymous";
-      img.src = blobUrl;
-      await new Promise((r) => (img.onload = r));
-      imgEl = img;
-      try {
-        descriptor = await calcDescriptorFromImageEl(img);
-      } catch (e) {}
-    } else {
-      return toast.show("No image or camera available", "error");
-    }
-
-    const debugInfo: any = {};
-    if (descriptor) {
-      const arr = descriptorToArray(descriptor);
-      debugInfo.descriptor_len = arr.length;
-    } else {
-      debugInfo.descriptor_len = 0;
-    }
-
-    if (!imgEl) throw new Error("Failed to obtain image element");
-    const canvas = document.createElement("canvas");
-    const w = imgEl.naturalWidth || imgEl.width || 640;
-    const h = imgEl.naturalHeight || imgEl.height || 480;
-
-    const maxDim = 1200;
-    let targetW = w;
-    let targetH = h;
-    if (Math.max(w, h) > maxDim) {
-      if (w >= h) {
-        targetW = maxDim;
-        targetH = Math.round((h / w) * maxDim);
-      } else {
-        targetH = maxDim;
-        targetW = Math.round((w / h) * maxDim);
-      }
-    }
-    canvas.width = targetW;
-    canvas.height = targetH;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) throw new Error("Canvas not available");
-    ctx.drawImage(imgEl, 0, 0, targetW, targetH);
-
-    // Gửi nguyên dataUrl có prefix "data:image/jpeg;base64,"
-    const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-
-    setLastVerifyDebug(debugInfo);
-
-    const res = await StudentService.verifyAttendanceImage(
-      dataUrl /* gửi cả prefix, backend sẽ xử lý */
-    );
-
-    setLastVerifyDebug((prev: any) => ({ ...prev, server: res }));
-
-    if (res?.matched) {
+  // primary verify flow: capture from camera (or use uploaded file), compute descriptor, send to backend verify
+  const onVerify = async (e?: React.FormEvent) => {
+    e?.preventDefault();
+    if (!modelsLoaded) {
       toast?.show
-        ? toast.show("Attendance verified", "success")
-        : console.info("Attendance verified (no toast)");
-      setPhotoPreview(null);
-    } else {
-      const human = res?.humanMessageVi;
-      if (human) {
-        toast?.show ? toast.show(human, "error") : console.warn(human);
-      } else {
-        const distanceText = res?.distance ?? "?";
-        const msg = `Not matched (distance=${distanceText})`;
-        toast?.show ? toast.show(msg, "error") : console.warn(msg);
-      }
-      try {
-        const rawShort = JSON.stringify(res, null, 2);
-        toast?.show ? toast.show(rawShort, "error") : console.log(rawShort);
-      } catch (e) {}
+        ? toast.show(
+            "Face detection models are still loading. Please wait a moment.",
+            "error"
+          )
+        : console.warn("Toast provider missing: Face models not loaded yet");
+      return;
     }
-  } catch (err: any) {
-    console.error(err);
-    const msg = err?.message || "Verification failed";
-    if (
-      String(msg).toLowerCase().includes("no face detected") ||
-      String(msg).toLowerCase().includes("failed to compute descriptor")
-    ) {
-      setLastVerifyDebug({
-        descriptor_len: 0,
-        usedAI: false,
-        minDistance: "-",
-      });
-      toast.show(
-        "Không phát hiện khuôn mặt trên ảnh. Vui lòng bật camera, đảm bảo ánh sáng tốt, không che mặt và giữ khuôn mặt ở giữa khung hình. Thử lại.",
-        "error"
-      );
-    } else {
-      toast.show(msg, "error");
-    }
-  } finally {
-    setVerifying(false);
-  }
-};
 
+    try {
+      setVerifying(true);
+      let descriptor: Float32Array | null = null;
+      let imgEl: HTMLImageElement | null = null;
+
+      if (photoPreview) {
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = photoPreview;
+        await new Promise((r) => (img.onload = r));
+        imgEl = img;
+        try {
+          descriptor = await calcDescriptorFromImageEl(img);
+        } catch (e) {}
+      } else if (videoRef.current) {
+        const blobUrl = await captureFromVideo();
+        const img = new Image();
+        img.crossOrigin = "anonymous";
+        img.src = blobUrl;
+        await new Promise((r) => (img.onload = r));
+        imgEl = img;
+        try {
+          descriptor = await calcDescriptorFromImageEl(img);
+        } catch (e) {}
+      } else {
+        return toast.show("No image or camera source available.", "error");
+      }
+
+      const debugInfo: any = {};
+      debugInfo.descriptor_len = descriptor ? descriptor.length : 0;
+
+      if (!imgEl) throw new Error("Failed to obtain image element");
+      const canvas = document.createElement("canvas");
+      const w = imgEl.naturalWidth || imgEl.width || 640;
+      const h = imgEl.naturalHeight || imgEl.height || 480;
+
+      const maxDim = 1200;
+      let targetW = w;
+      let targetH = h;
+      if (Math.max(w, h) > maxDim) {
+        if (w >= h) {
+          targetW = maxDim;
+          targetH = Math.round((h / w) * maxDim);
+        } else {
+          targetH = maxDim;
+          targetW = Math.round((w / h) * maxDim);
+        }
+      }
+      canvas.width = targetW;
+      canvas.height = targetH;
+      const ctx = canvas.getContext("2d");
+      if (!ctx) throw new Error("Canvas not available");
+      ctx.drawImage(imgEl, 0, 0, targetW, targetH);
+
+      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
+      setLastVerifyDebug(debugInfo);
+
+      // call API
+      const res = await StudentService.verifyFaceQuality(dataUrl);
+      setLastVerifyDebug((prev: any) => ({ ...prev, server: res }));
+      console.log(res);
+      if (res?.valid) {
+        toast?.show
+          ? toast.show(
+              "Face detected successfully. This image is suitable for enrollment.",
+              "success"
+            )
+          : console.info("Face verified (no toast)");
+        setVerified(true);
+
+        // setPhotoPreview(null);
+      } else {
+        const message =
+          res?.message ||
+          res?.humanMessageVi ||
+          "The face could not be verified. Please try again with better lighting or clearer face.";
+        toast?.show ? toast.show(message, "error") : console.warn(message);
+        setVerified(false);
+      }
+    } catch (err: any) {
+      console.error(err);
+      const msg = err?.message || "Face quality check failed";
+      if (
+        String(msg).toLowerCase().includes("no face detected") ||
+        String(msg).toLowerCase().includes("failed to compute descriptor")
+      ) {
+        setLastVerifyDebug({
+          descriptor_len: 0,
+          usedAI: false,
+          minDistance: "-",
+        });
+        toast.show(
+          "No face detected in the image. Make sure your face is clearly visible, with good lighting, and centered in the frame. Try again.",
+          "error"
+        );
+      } else {
+        toast.show(msg, "error");
+      }
+    } finally {
+      setVerifying(false);
+    }
+  };
 
   const onSubmitPhoto = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -636,198 +632,175 @@ const onVerify = async (e?: React.FormEvent) => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-6 px-3 flex justify-center items-start">
-      <div className="w-full max-w-5xl bg-white rounded-2xl shadow-xl p-6 md:p-10 transition-shadow duration-300">
-        <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">
-          Attendance Upload
-        </h1>
+    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-blue-100 py-10 px-4 flex justify-center items-center">
+      <div className="w-full max-w-6xl bg-white rounded-3xl shadow-2xl overflow-hidden grid grid-cols-1 md:grid-cols-2">
+        {/* === LEFT: Camera Preview === */}
+        <div className="bg-gray-900 text-white flex flex-col justify-center items-center p-6 relative">
+          <h3 className="text-lg font-semibold mb-3 text-center">
+            Live Camera
+          </h3>
 
-        <h2 className="text-2xl font-semibold mb-6 text-green-700 flex items-center gap-2">
-          <Camera size={22} />
-          Attendance Check-in
-        </h2>
+          <div className="relative w-64 h-64 md:w-80 md:h-80 rounded-2xl overflow-hidden shadow-lg border-2 border-gray-700">
+            <video
+              ref={videoRef}
+              autoPlay
+              playsInline
+              muted
+              className={`w-full h-full object-cover ${
+                !cameraOn ? "opacity-40 grayscale" : ""
+              }`}
+            />
 
-        <div className="space-y-6">
-          {/* --- CAMERA SECTION --- */}
-          <label className="block text-gray-700 font-medium">
-            Use camera to take a selfie (recommended)
-          </label>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {/* LEFT SIDE - CAMERA */}
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Camera</span>
-                {!cameraOn ? (
-                  <button
-                    onClick={startCamera}
-                    className="px-4 py-1.5 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition"
-                  >
-                    Start
-                  </button>
-                ) : (
-                  <button
-                    onClick={stopCamera}
-                    className="px-4 py-1.5 bg-red-500 text-white rounded-md hover:bg-red-600 transition"
-                  >
-                    Stop
-                  </button>
-                )}
-              </div>
-
-              <div className="relative w-full h-72 md:h-80 overflow-hidden rounded-xl border border-gray-200 shadow-sm">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className={`w-full h-full object-cover ${
-                    !cameraOn ? "opacity-50" : ""
-                  }`}
-                />
-                {/* Overlay mờ */}
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <svg width="100%" height="100%">
-                    <defs>
-                      <mask id="mask">
-                        <rect width="100%" height="100%" fill="white" />
-                        <circle cx="50%" cy="50%" r="110" fill="black" />
-                      </mask>
-                    </defs>
-                    <rect
-                      width="100%"
-                      height="100%"
-                      fill="rgba(0,0,0,0.5)"
-                      mask="url(#mask)"
-                    />
-                  </svg>
-                </div>
-
-                {/* Viền tròn hướng dẫn */}
-                <div
-                  className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 h-56 rounded-full border-4 ${
-                    faceDetected
-                      ? "border-green-500 shadow-[0_0_25px_rgba(34,197,94,0.8)]"
-                      : "border-gray-300"
-                  }`}
-                ></div>
-
-                <div className="absolute bottom-3 w-full text-center text-white text-sm font-medium drop-shadow">
-                  Keep your face within the circle{" "}
-                </div>
-              </div>
-
-              <canvas ref={canvasRef} className="hidden" />
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={() => {
-                    captureFromVideo().then((url) => setPhotoPreview(url));
-                  }}
-                  disabled={!cameraOn}
-                  className={`px-4 py-2 rounded-md text-white text-sm font-medium ${
-                    !cameraOn
-                      ? "bg-gray-300 text-gray-600 cursor-not-allowed"
-                      : "bg-blue-600 hover:bg-blue-700"
-                  }`}
-                >
-                  Capture
-                </button>
-
-                <button
-                  onClick={onVerify}
-                  disabled={
-                    !modelsLoaded || verifying || !cameraOn || !faceDetected
-                  }
-                  className={`px-4 py-2 rounded-md text-white text-sm font-medium ${
-                    !modelsLoaded || verifying || !cameraOn || !faceDetected
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700"
-                  }`}
-                >
-                  {verifying ? "Verifying..." : "Verify from Camera"}
-                </button>
-              </div>
-            </div>
-
-            {/* RIGHT SIDE - UPLOAD */}
-            <div className="space-y-4">
-              <label className="block text-gray-700 font-medium">
-                Or upload a selfie image
-              </label>
-              <input
-                id="photo"
-                type="file"
-                accept="image/*"
-                onChange={onPhotoChange}
-                className="block w-full text-sm text-gray-600 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-600 file:text-white hover:file:bg-green-700 transition"
+            {/* Overlay hướng dẫn */}
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div
+                className={`w-48 h-48 md:w-56 md:h-56 rounded-full border-4 ${
+                  faceDetected
+                    ? "border-green-400 shadow-[0_0_30px_rgba(74,222,128,0.8)]"
+                    : "border-white/40"
+                }`}
               />
+            </div>
+            <p className="absolute bottom-3 text-sm font-medium w-full text-center text-white/80">
+              Align your face inside the circle
+            </p>
+          </div>
 
-              {photoPreview && (
+          {/* Camera control buttons */}
+          <div className="flex gap-3 mt-6">
+            {!cameraOn ? (
+              <button
+                onClick={startCamera}
+                className="px-5 py-2 bg-blue-600 rounded-full hover:bg-blue-700 text-white font-medium"
+              >
+                Start Camera
+              </button>
+            ) : (
+              <button
+                onClick={stopCamera}
+                className="px-5 py-2 bg-red-500 rounded-full hover:bg-red-600 text-white font-medium"
+              >
+                Stop
+              </button>
+            )}
+            <button
+              onClick={() => {
+                captureFromVideo().then((url) => setPhotoPreview(url));
+              }}
+              disabled={!cameraOn}
+              className={`px-5 py-2 rounded-full font-medium ${
+                !cameraOn
+                  ? "bg-gray-400 text-gray-200 cursor-not-allowed"
+                  : "bg-green-600 text-white hover:bg-green-700"
+              }`}
+            >
+              Capture
+            </button>
+          </div>
+
+          <canvas ref={canvasRef} className="hidden" />
+        </div>
+
+        {/* === RIGHT: Upload & Actions === */}
+        <div className="p-8 md:p-10 flex flex-col justify-center space-y-6">
+          <h2 className="text-2xl font-semibold text-gray-800 flex items-center gap-2">
+            <Camera size={22} className="text-green-600" />
+            Upload or Enroll Selfie
+          </h2>
+
+          <div className="space-y-4">
+            <label className="block text-gray-700 font-medium">
+              Upload a selfie image
+            </label>
+            <input
+              id="photo"
+              type="file"
+              accept="image/*"
+              onChange={onPhotoChange}
+              className="block w-full text-sm text-gray-700 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-green-600 file:text-white hover:file:bg-green-700 transition"
+            />
+
+            {photoPreview && (
+              <div className="w-64 h-64 mx-auto rounded-2xl overflow-hidden border shadow-md">
                 <img
                   src={photoPreview}
                   alt="Preview"
-                  className="w-full h-72 object-cover rounded-xl border border-gray-200 shadow-md"
+                  className="w-full h-full object-cover"
                 />
-              )}
-
-              <div className="flex flex-wrap gap-3">
-                <button
-                  onClick={onVerify}
-                  disabled={!modelsLoaded || verifying}
-                  className={`px-4 py-2 rounded-md text-white text-sm font-medium ${
-                    !modelsLoaded || verifying
-                      ? "bg-gray-400 cursor-not-allowed"
-                      : "bg-green-600 hover:bg-green-700"
-                  }`}
-                >
-                  {verifying ? "Verifying..." : "Verify uploaded image"}
-                </button>
-
-                <button
-                  onClick={async () => {
-                    /* enroll logic giữ nguyên */
-                  }}
-                  className="px-4 py-2 rounded-md text-white text-sm font-medium bg-blue-500 hover:bg-blue-600"
-                >
-                  Enroll face
-                </button>
               </div>
+            )}
+          </div>
 
-              <div className="text-sm text-gray-600">
-                Note: The button below will save this image as your "facial
-                data" (enrollment) for future attendance verification.
-              </div>
+          <div className="flex flex-wrap gap-3 justify-center md:justify-start">
+            <button
+              onClick={onVerify}
+              disabled={!modelsLoaded || verifying}
+              className={`px-5 py-2 rounded-full text-white font-medium ${
+                !modelsLoaded || verifying
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-green-600 hover:bg-green-700"
+              }`}
+            >
+              {verifying ? "Verifying..." : "Verify Image"}
+            </button>
 
-              <button
-                onClick={async () => {
-                  /* save logic giữ nguyên */
-                }}
-                disabled={uploading}
-                className={`px-4 py-2 rounded-md text-white text-sm font-medium ${
-                  uploading
-                    ? "bg-green-400 cursor-not-allowed"
-                    : "bg-blue-600 hover:bg-blue-700"
-                }`}
-              >
-                {uploading ? "Saving..." : "Save face data (Enroll)"}
-              </button>
-            </div>
+            <button
+              onClick={async () => {
+                if (!verified) return;
+
+                // enroll captured preview or selected file
+                let file =
+                  (document.getElementById("photo") as HTMLInputElement | null)
+                    ?.files?.[0] ?? null;
+                if (!file && photoPreview) {
+                  try {
+                    const res = await fetch(photoPreview);
+                    const blob = await res.blob();
+                    file = new File([blob], "capture.jpg", {
+                      type: blob.type || "image/jpeg",
+                    });
+                  } catch (e) {
+                    console.error("Failed to fetch preview blob for enroll", e);
+                  }
+                }
+                if (!file)
+                  return toast?.show
+                    ? toast.show("Không có ảnh để enroll", "error")
+                    : null;
+                let sendFile = file;
+                try {
+                  sendFile = await resizeImage(file, 1024, 0.8);
+                } catch (e) {
+                  // ignore and use original
+                }
+                const r = await StudentService.enrollSelf(sendFile);
+                if (r) {
+                  toast?.show
+                    ? toast.show("Enroll thành công", "success")
+                    : null;
+                  // update debug info
+                  setLastVerifyDebug((p: any) => ({
+                    ...(p || {}),
+                    enroll: r,
+                  }));
+                } else {
+                  toast?.show ? toast.show("Enroll thất bại", "error") : null;
+                }
+              }}
+              disabled={!verified}
+              className={`px-3 py-2 rounded text-white ${
+                !verified
+                  ? "bg-gray-400 cursor-not-allowed"
+                  : "bg-blue-500 hover:bg-blue-600"
+              }`}
+            >
+              Enroll face
+            </button>
           </div>
 
           {!modelsLoaded && (
-            <div className="text-sm text-yellow-600">
+            <div className="text-sm text-yellow-600 text-center md:text-left">
               Loading face models...
-            </div>
-          )}
-
-          {lastVerifyDebug && (
-            <div className="mt-6 p-4 bg-gray-50 border rounded-lg text-sm text-gray-700 overflow-auto max-h-60">
-              <div className="font-medium mb-1">Debug info</div>
-              <div>Descriptor length: {lastVerifyDebug.descriptor_len}</div>
-              <pre className="whitespace-pre-wrap text-xs mt-2">
-                {JSON.stringify(lastVerifyDebug.server, null, 2)}
-              </pre>
             </div>
           )}
         </div>

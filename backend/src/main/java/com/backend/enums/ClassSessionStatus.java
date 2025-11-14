@@ -8,5 +8,6 @@ public enum ClassSessionStatus {
     IN_PROGRESS,
     COMPLETED,
     CANCELLED,
-    UPCOMING
+    UPCOMING,
+    MISSED
 }

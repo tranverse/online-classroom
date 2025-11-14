@@ -2,6 +2,7 @@ import React, { useEffect, useState, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { AdminService } from "../../services/admin.service";
 import { DataTable } from "../../components/DataTable";
+import { FaEye, FaTrash, FaUserAltSlash } from "react-icons/fa";
 
 const formatDate = (dateStr?: string) => {
   if (!dateStr) return "-";
@@ -33,7 +34,12 @@ const ClassroomDetailsPage: React.FC = () => {
     };
     load();
   }, [id]);
-
+  const [showRemoveModal, setShowRemoveModal] = useState(false);
+  const [selectedStudent, setSelectedStudent] = useState<{
+    id?: string;
+    name?: string;
+  } | null>(null);
+  console.log(selectedStudent)
   const students = data?.students || [];
   const classroom = data?.classroom;
 
@@ -58,17 +64,54 @@ const ClassroomDetailsPage: React.FC = () => {
         key: "actions",
         title: "Actions",
         render: (row: any) => (
-          <button
-            className="text-blue-600 hover:text-blue-800 font-medium"
-            onClick={() => navigate(`/admin/users/${row.student?.id}`)}
-          >
-            View
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              className="text-blue-600 hover:text-blue-800 font-medium"
+              onClick={() => navigate(`/admin/users/${row.student?.id}`)}
+            >
+              <FaEye />
+            </button>
+            <button
+              className="text-red-600 hover:text-red-800"
+              onClick={() => {
+                setSelectedStudent({
+                  id: row.student?.id,
+                  name: row.student?.name,
+                });
+                setShowRemoveModal(true);
+              }}
+            >
+              <FaUserAltSlash />
+            </button>
+          </div>
         ),
       },
     ],
     [navigate]
   );
+  
+  // Hàm xử lý remove student
+  const handleRemoveStudent = async (
+    classroomId?: string,
+    studentId?: string
+  ) => {
+    console.log(classroomId)
+    try {
+      const res = await AdminService.removeStudentFromClassroom(
+        classroomId,
+        studentId
+      );
+      console.log(res);
+      // Cập nhật local state để refresh table
+      setData((prev: any) => ({
+        ...prev,
+        students: prev.students.filter((s: any) => s.student?.id !== studentId),
+      }));
+    } catch (err) {
+      console.error("Failed to remove student", err);
+      alert("Failed to remove student");
+    }
+  };
 
   if (!id) return <div className="p-6">No classroom id provided</div>;
 
@@ -123,7 +166,9 @@ const ClassroomDetailsPage: React.FC = () => {
           </span>
         </div>
         <div className="bg-white border rounded-xl shadow-sm p-4 flex flex-col">
-          <span className="text-xs text-gray-400 uppercase mb-1">Start Date</span>
+          <span className="text-xs text-gray-400 uppercase mb-1">
+            Start Date
+          </span>
           <span className="font-medium text-gray-900">
             {formatDate(classroom?.startDate)}
           </span>
@@ -152,6 +197,41 @@ const ClassroomDetailsPage: React.FC = () => {
           className="rounded-xl"
         />
       </div>
+      {showRemoveModal && selectedStudent && (
+        <div className="fixed inset-0 flex items-center justify-center bg-black/30 z-50">
+          <div className="bg-white rounded-xl shadow-lg p-6 w-96">
+            <h3 className="text-lg font-semibold text-gray-800 mb-4">
+              Confirm Remove
+            </h3>
+            <p className="text-gray-600 mb-6">
+              Are you sure you want to remove{" "}
+              <span className="font-medium">{selectedStudent.name}</span> from
+              this classroom?
+            </p>
+            <div className="flex justify-end gap-3">
+              <button
+                className="px-4 py-2 rounded-lg bg-gray-200 hover:bg-gray-300 text-gray-800"
+                onClick={() => {
+                  setShowRemoveModal(false);
+                  setSelectedStudent(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="px-4 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white"
+                onClick={async () => {
+                  await handleRemoveStudent(classroom?.id, selectedStudent.id);
+                  setShowRemoveModal(false);
+                  setSelectedStudent(null);
+                }}
+              >
+                Remove
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

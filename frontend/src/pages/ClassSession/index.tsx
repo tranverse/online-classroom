@@ -144,6 +144,7 @@ const ClassSession = () => {
   const [socketState, setSocketState] = React.useState<Socket | null>(null);
   const [socketConnected, setSocketConnected] = React.useState(false);
   const [socketId, setSocketId] = React.useState<string | null>(null);
+  const currentSessionId = (window as any).__CURRENT_CLASSSESSION_ID || null;
 
   useEffect(() => {
     // connect to socket server; server URL can be injected via env
@@ -542,6 +543,20 @@ const ClassSession = () => {
           <div className="flex items-center gap-3">
             <GiAerialSignal className="text-green-500 text-xl" />
             <p className="text-sm font-medium text-gray-700">Started: 5:01</p>
+          </div>
+
+          {/* Debug: socket id and session id (dev) */}
+          <div className="text-xs text-gray-500 ml-4">
+            <div>
+              socket:{" "}
+              <span className="font-mono text-xs">{socketId || "-"}</span>
+            </div>
+            <div>
+              room:{" "}
+              <span className="font-mono text-xs">
+                {currentSessionId || "-"}
+              </span>
+            </div>
           </div>
 
           {/* Right: Actions */}

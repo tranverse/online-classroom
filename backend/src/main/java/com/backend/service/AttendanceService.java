@@ -3,6 +3,7 @@ package com.backend.service;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 import lombok.extern.java.Log;
@@ -39,8 +40,18 @@ public class AttendanceService {
     com.backend.service.StudentFaceService studentFaceService;
 
     public AttendanceResponse submitAttendance(String classSessionId, String userId, AttendanceRequest request) {
-        Attendance attendance = new Attendance();
-        attendance.setAttendanceTime(LocalDateTime.now());
+
+        Attendance existing = attendanceRepository
+                .findByClassSessionIdAndStudentId(classSessionId, userId);
+        Attendance attendance;
+
+        if (existing == null) {
+            attendance = new Attendance();
+            attendance.setCreatedAt(LocalDateTime.now());
+        }else {
+            attendance = existing;
+            attendance.setUpdatedAt(LocalDateTime.now());
+        }
 
         // Run face recognition: extract descriptor from image
         java.util.List<Double> descriptor = null;
@@ -209,27 +220,7 @@ public class AttendanceService {
 
         // perform liveness check if analyze metrics present
         boolean livenessPassed = true;
-//        if (analyzeMetrics != null) {
-//            try {
-//                // Prefer explicit numeric livenessScore returned by the AI analyze endpoint if present
-//                Object lsObj = analyzeMetrics.getOrDefault("livenessScore", analyzeMetrics.get("score"));
-//                if (lsObj instanceof Number) {
-//                    double ls = ((Number) lsObj).doubleValue();
-//                    livenessPassed = ls >= faceRecognitionService.getLivenessThreshold();
-//                    noteBuilder.append("liveness=").append(String.valueOf(livenessPassed)).append(";");
-//                    noteBuilder.append("livenessScore=").append(String.valueOf(ls)).append(";");
-//                } else {
-//                    // fallback to challengeMetrics + fakeDetector validation
-//                    Map<String,Object> lv = faceRecognitionService.validateLiveness((Map<String,Object>)analyzeMetrics.getOrDefault("challengeMetrics", analyzeMetrics));
-//                    livenessPassed = Boolean.TRUE.equals(lv.get("livenessPassed"));
-//                    noteBuilder.append("liveness=").append(String.valueOf(livenessPassed)).append(";");
-//                    if (lv.get("blinkProb") != null) noteBuilder.append("blinkProb=").append(String.valueOf(lv.get("blinkProb"))).append(";");
-//                    if (lv.get("yawDelta") != null) noteBuilder.append("yawDelta=").append(String.valueOf(lv.get("yawDelta"))).append(";");
-//                }
-//            } catch (Exception ex) {
-//                // ignore
-//            }
-//        }
+
         if (analyzeMetrics != null) {
             try {
                 // lấy map liveness từ AI

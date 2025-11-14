@@ -4,6 +4,7 @@ import { FiFolder, FiHome, FiBookOpen } from "react-icons/fi";
 import { useAppSelector } from "../../store/hooks";
 import { selectCurrentUser } from "../../store/selectors";
 import { Link } from "react-router-dom";
+import UserDropdown from "@layouts/components/UserDropdown";
 // ClassroomService no longer used here; header links directly to classroom lists
 
 const UserHeader: React.FC = () => {
@@ -18,14 +19,15 @@ const UserHeader: React.FC = () => {
     ? `${baseLink}/user/${encodeURIComponent(userId)}`
     : baseLink;
   const filesLink = `${baseLink}/files`;
-
+  const root =
+    user && (user as any).role === "TEACHER" ? "/teacher" : "/student";
   return (
     <header className="bg-white border-b shadow-sm px-6 py-3">
       <div className="flex justify-between items-center">
         {/* Left: Home + Files */}
         <div className="flex items-center gap-4 text-gray-700">
           <Link
-            to="/student/home"
+            to={root}
             className="flex items-center gap-1 hover:text-blue-600 transition-colors"
           >
             <FiHome className="text-xl" />
@@ -33,7 +35,7 @@ const UserHeader: React.FC = () => {
           </Link>
 
           <Link
-            to={filesLink}
+            to={`${root}/files`}
             className="flex items-center gap-1 hover:text-blue-600 transition-colors"
           >
             <FiFolder className="text-xl" />
@@ -54,22 +56,7 @@ const UserHeader: React.FC = () => {
             </span>
           </Link>
 
-          <Link to="/student/profile-attendance">
-            <div className="flex items-center gap-2 cursor-pointer">
-              {user?.avatar ? (
-                <img
-                  src={user.avatar}
-                  alt={user.name}
-                  className="w-8 h-8 rounded-full object-cover"
-                />
-              ) : (
-                <CiUser className="text-2xl text-gray-700" />
-              )}
-              <span className="hidden md:inline text-sm font-medium text-gray-700">
-                {user?.name || "User"}
-              </span>
-            </div>
-          </Link>
+          <UserDropdown user={user} />
         </div>
       </div>
     </header>

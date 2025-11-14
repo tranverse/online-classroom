@@ -144,6 +144,17 @@ public class TeacherController {
         }
     }
 
+    @PutMapping("/sessions/in_progress/{sessionId}")
+    public ResponseEntity<ApiResponse<ClassSessionResponse>> updateClassSessionStatusInProgress(@PathVariable String sessionId) {
+        try {
+            ClassSession session = teacherService.updateClassSessionInProgress(sessionId);
+            ClassSessionResponse resp = classSessionMapper.toClassSessionResponse(session);
+            return ResponseEntity.ok(ApiResponse.<ClassSessionResponse>builder().message("Update session in progress successfully").code("teacher-session-update").data(resp).build());
+        } catch (Exception ex) {
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(ApiResponse.<ClassSessionResponse>builder().success(false).message("Failed to update session").build());
+        }
+    }
+
     @DeleteMapping("/sessions/{sessionId}")
     public ResponseEntity<ApiResponse<?>> deleteClassSession(@PathVariable String sessionId) {
         try {
