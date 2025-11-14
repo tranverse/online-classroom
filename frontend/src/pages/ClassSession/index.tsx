@@ -546,7 +546,7 @@ const ClassSession = () => {
           </div>
 
           {/* Debug: socket id and session id (dev) */}
-          <div className="text-xs text-gray-500 ml-4">
+          {/* <div className="text-xs text-gray-500 ml-4">
             <div>
               socket:{" "}
               <span className="font-mono text-xs">{socketId || "-"}</span>
@@ -557,7 +557,7 @@ const ClassSession = () => {
                 {currentSessionId || "-"}
               </span>
             </div>
-          </div>
+          </div> */}
 
           {/* Right: Actions */}
           <div className="flex items-center gap-4 text-gray-700">

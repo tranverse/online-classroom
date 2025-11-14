@@ -415,20 +415,23 @@ const AttendanceCapture: React.FC<Props> = ({
             if (map["descriptor_len"] === "0") {
               if (map["usedAI"] === "true") {
                 setMessage(
-                  "Không thể trích xuất khuôn mặt từ ảnh. Vui lòng chụp lại ở nơi có ánh sáng tốt hơn hoặc liên hệ hỗ trợ."
+                  "Face could not be extracted from the image. Please try again in a well-lit environment or contact support."
                 );
               } else {
                 setMessage(
-                  "Hệ thống không phát hiện khuôn mặt. Vui lòng bật camera, tăng ánh sáng, và thử lại."
+                  "No face detected. Please turn on your camera, improve lighting, and try again."
                 );
               }
             } else if (map["minDistance"] && map["minDistance"] !== "-") {
               setMessage(
-                `Không khớp với dữ liệu đăng ký. Khoảng cách gần nhất: ${map["minDistance"]}. Hãy thử điều chỉnh vị trí mặt, chụp thẳng vào camera, hoặc đăng ký lại khuôn mặt.`
+                `Face does not match the registered data. Please align your face straight to the camera or re-enroll your face.`
+              );
+              toast.error(
+                `Face does not match the registered data. Please align your face straight to the camera or re-enroll your face.`
               );
             } else {
               setMessage(
-                "Không thể đối sánh điểm danh. Vui lòng thử lại hoặc đăng ký khuôn mặt (Enroll)."
+                "Unable to record attendance. Please try again or re-enroll your face."
               );
 
               // build targeted suggestions based on debug map
@@ -760,7 +763,7 @@ const AttendanceCapture: React.FC<Props> = ({
           disabled={capturing}
           className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 transition disabled:opacity-60"
         >
-          {capturing ? "Đang gửi..." : "Mark attendance"}
+          {capturing ? "Sending..." : "Mark attendance"}
         </button>
 
         {livenessFailed && (
@@ -769,7 +772,7 @@ const AttendanceCapture: React.FC<Props> = ({
             disabled={capturing}
             className="px-4 py-2 rounded-lg bg-red-600 text-white font-medium hover:bg-red-700 transition disabled:opacity-60"
           >
-            {capturing ? "Đang thử lại..." : "Thử lại Anti-Spoof"}
+            {capturing ? "Đang thử lại..." : "Retry Anti-Spoof"}
           </button>
         )}
       </div>
@@ -785,26 +788,21 @@ const AttendanceCapture: React.FC<Props> = ({
             <li>Blink slowly or gently turn your head left/right.</li>
             <li>Remove reflective glasses or hats.</li>
           </ul>
-          {livenessDetails && (
-            <div className="text-xs mt-2 text-gray-600">
-              Debug: {livenessDetails}
-            </div>
-          )}
         </div>
       )}
 
       {/* Debug info */}
-      {message && (
+      {/* {message && (
         <details className="bg-gray-50 p-2 rounded text-xs text-gray-700 whitespace-pre-wrap">
           <summary className="cursor-pointer font-semibold text-gray-600">
             Debug Info
           </summary>
           {message}
         </details>
-      )}
+      )} */}
 
       {/* Gợi ý */}
-      {suggestions.length > 0 && (
+      {/* {suggestions.length > 0 && (
         <div className="mt-2 bg-gray-50 p-3 rounded-lg">
           <div className="font-medium text-sm mb-1">💡 Gợi ý:</div>
           <ul className="list-disc ml-5 text-sm text-gray-700 space-y-1">
@@ -818,7 +816,7 @@ const AttendanceCapture: React.FC<Props> = ({
             ))}
           </ul>
         </div>
-      )}
+      )} */}
     </div>
   );
 };

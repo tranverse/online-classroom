@@ -86,58 +86,90 @@ embed_dim = int(os.environ.get('EMBEDDING_DIM', '128'))
 # allow forcing placeholder embeddings via env
 PLACEHOLDER_EMBEDDING = str(os.environ.get('PLACEHOLDER_EMBEDDING', '')).lower() in ('1','true','yes')
 
+# --- InsightFace Model ---
+INSIGHTFACE_READY = False
+model = None
+embedder = None
+
 def init_models():
-    global detector, embedder, INSIGHTFACE_READY
-    if INSIGHTFACE_AVAILABLE:
-        try:
-            app_ins = FaceAnalysis(name="buffalo_l", providers=["CPUExecutionProvider"])
-            logger.info("Preparing InsightFace model...")
-            app_ins.prepare(ctx_id=-1, det_size=(640, 640))
-            detector = app_ins
-            embedder = app_ins
-            INSIGHTFACE_READY = True
-            logger.info("✅ InsightFace ready")
-        except Exception as e:
-            logger.error("InsightFace init failed: %s", e)
-            INSIGHTFACE_READY = False
+    global model, embedder, INSIGHTFACE_READY
+    try:
+        import insightface
+        model = insightface.app.FaceAnalysis(name="buffalo_l")
+        model.prepare(ctx_id=0, det_size=(640,640))
+        embedder = model
+        INSIGHTFACE_READY = True
+        logger.info("✅ InsightFace model ready (single instance for detect + embed)")
+    except Exception as e:
+        logger.error("InsightFace init failed: %s", e)
+        INSIGHTFACE_READY = False
 
 init_models()
 
+
+init_models()
+import insightface
+model = insightface.app.FaceAnalysis()
+model.prepare(ctx_id=0, det_size=(640,640))
+INSIGHTFACE_READY = True
+embedder = model
 # --- Face detection & embedding ---
 def detect_face_boxes(img: np.ndarray):
-    if not INSIGHTFACE_READY:
-        return []
-    try:
-        faces = detector.get(img)
-        out = []
-        for f in faces:
-            if f.bbox is None:
-                continue
-            x1, y1, x2, y2 = map(int, f.bbox)
-            crop = img[max(0, y1):y2, max(0, x1):x2]
-            out.append({"face": crop, "bbox": (x1, y1, x2, y2), "kps": getattr(f, "kps", None)})
-        return out
-    except Exception as e:
-        logger.exception("detect_face_boxes failed: %s", e)
-        return []
+    faces = model.get(img)
 
-def embed_face(face_img: np.ndarray):
+    out = []
+    for f in faces:
+        x1, y1, x2, y2 = map(int, f.bbox)
+        crop = img[y1:y2, x1:x2]
+
+        out.append({
+            "face": crop,
+            "bbox": (x1, y1, x2, y2),
+            "kps": f.kps  # 5 keypoints
+        })
+    return out
+
+
+
+# def embed_face(face_img: np.ndarray):
+#     try:
+#         if INSIGHTFACE_READY and embedder is not None:
+#             arr = embedder.get(np.asarray(face_img))
+#             if isinstance(arr, (list, tuple)) and len(arr) > 0 and hasattr(arr[0], "embedding"):
+#                 vec = np.array(arr[0].embedding, dtype="float32")
+#                 return l2_normalize(vec).tolist()
+#             else:
+#                 logger.warning("InsightFace returned empty embedding")
+#         # fallback to placeholder embedding when no real model available or model failed
+#         if PLACEHOLDER_EMBEDDING or not INSIGHTFACE_READY:
+#             return _placeholder_embedding_from_image(face_img)
+#         return None
+#     except Exception as e:
+#         logger.exception("embed_face failed: %s", e)
+#         # fallback
+#         return _placeholder_embedding_from_image(face_img)
+from insightface.utils.face_align import norm_crop
+
+def align_face(img, kps):
+    # norm_crop from insightface handles alignment automatically
+    return norm_crop(img, kps, image_size=112)
+def embed_face(face_img: np.ndarray, kps=None):
     try:
         if INSIGHTFACE_READY and embedder is not None:
-            arr = embedder.get(np.asarray(face_img))
-            if isinstance(arr, (list, tuple)) and len(arr) > 0 and hasattr(arr[0], "embedding"):
-                vec = np.array(arr[0].embedding, dtype="float32")
+            # debug save
+            cv2.imwrite("debug_face_crop.jpg", face_img)
+            # convert BGR -> RGB
+            faces = embedder.get(cv2.cvtColor(face_img, cv2.COLOR_BGR2RGB))
+            if faces and hasattr(faces[0], "embedding"):
+                vec = np.array(faces[0].embedding, dtype="float32")
                 return l2_normalize(vec).tolist()
             else:
-                logger.warning("InsightFace returned empty embedding")
-        # fallback to placeholder embedding when no real model available or model failed
-        if PLACEHOLDER_EMBEDDING or not INSIGHTFACE_READY:
-            return _placeholder_embedding_from_image(face_img)
-        return None
+                logger.warning("InsightFace returned empty embedding for crop")
     except Exception as e:
         logger.exception("embed_face failed: %s", e)
-        # fallback
-        return _placeholder_embedding_from_image(face_img)
+    # fallback placeholder embedding
+    return _placeholder_embedding_from_image(face_img)
+
 
 
 def _placeholder_embedding_from_image(face_img: np.ndarray):
@@ -195,70 +227,181 @@ def simple_liveness_checks(img, kps=None):
         logger.warning("simple_liveness_checks failed: %s", e)
         return 0.5, 0.5, 0.0
 
-# --- API Endpoints ---
+# # --- API Endpoints ---
+# @app.route("/extract", methods=["POST"])
+# def extract():
+#     data = request.get_json() or {}
+#     img_b64 = data.get("imageBase64")
+#     try:
+#         img = decode_image(img_b64)
+#     except Exception as e:
+#         return jsonify({"error": "invalid_image", "message": str(e)}), 400
+
+#     # Debug: save incoming image so developer can inspect when detections fail
+#     try:
+#         debug_path = os.path.join(BASE_DIR, 'debug_last_incoming.jpg')
+#         # re-create bytes from base64 (support data: URI)
+#         try:
+#             raw_b64 = img_b64.split(',')[1] if img_b64.startswith('data:image') else img_b64
+#         except Exception:
+#             raw_b64 = img_b64
+#         with open(debug_path, 'wb') as f:
+#             f.write(base64.b64decode(raw_b64))
+#         logger.info('Saved debug incoming image to %s (shape=%s)', debug_path, getattr(img, 'shape', None))
+#     except Exception as ex:
+#         logger.warning('Failed to write debug incoming image: %s', ex)
+
+#     # Primary detectors
+#     faces = detect_face_boxes(img)
+#     # If primary detectors found nothing, try an OpenCV Haar-cascade fallback which sometimes
+#     # catches frontal faces missed by other detectors (useful for debugging on small images)
+#     if not faces:
+#         try:
+#             logger.info('Primary detectors found no faces; trying Haar cascade fallback (insight=%s,retina=%s,mtcnn=%s)', INSIGHTFACE_AVAILABLE, RETINAFACE_AVAILABLE, MTCNN_AVAILABLE)
+#             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+#             if os.path.exists(cascade_path):
+#                 cascade = cv2.CascadeClassifier(cascade_path)
+#                 gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+#                 rects = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
+#                 out = []
+#                 for (x, y, w, h) in rects:
+#                     crop = img[max(0, y):y + h, max(0, x):x + w]
+#                     out.append({'face': crop, 'bbox': (int(x), int(y), int(x + w), int(y + h)), 'kps': None})
+#                 if out:
+#                     faces = out
+#                     logger.info('Haar fallback found %d face(s)', len(out))
+#         except Exception as ex:
+#             logger.warning('Haar cascade fallback failed: %s', ex)
+
+#     if not faces:
+#         return jsonify({'reason': 'no_face_detected', 'descriptor': None}), 200
+
+#     results = []
+#     for face_entry in faces:  # handle multiple faces
+#         face_crop = face_entry["face"]
+#         descriptor = embed_face(face_crop)
+#         liveness_score, lbp_score, blink_score = simple_liveness_checks(face_crop, face_entry.get("kps"))
+#         results.append({
+#             "descriptor": descriptor,
+#             "bbox": face_entry.get("bbox"),
+#             # Provide multiple aliases so backend heuristic detector can consume
+#             "livenessScore": liveness_score,
+#             "liveness": liveness_score,
+#             "lbp": lbp_score,
+#             "blink": blink_score,
+#             "blinkProb": blink_score,
+#             # yawDelta not computed here; provide placeholder so backend doesn't see null
+#             "yawDelta": -1.0
+#         })
+
+#     return jsonify({"faces": results})
 @app.route("/extract", methods=["POST"])
 def extract():
     data = request.get_json() or {}
     img_b64 = data.get("imageBase64")
+
+    # -----------------------------
+    # 1. Decode safe
+    # -----------------------------
     try:
         img = decode_image(img_b64)
+        if img is None:
+            raise ValueError("decode returned None")
     except Exception as e:
         return jsonify({"error": "invalid_image", "message": str(e)}), 400
 
-    # Debug: save incoming image so developer can inspect when detections fail
+    # -----------------------------
+    # 2. Save debug (full size)
+    # -----------------------------
     try:
         debug_path = os.path.join(BASE_DIR, 'debug_last_incoming.jpg')
-        # re-create bytes from base64 (support data: URI)
-        try:
-            raw_b64 = img_b64.split(',')[1] if img_b64.startswith('data:image') else img_b64
-        except Exception:
-            raw_b64 = img_b64
+        raw_b64 = img_b64.split(',')[1] if img_b64.startswith('data:image') else img_b64
         with open(debug_path, 'wb') as f:
             f.write(base64.b64decode(raw_b64))
-        logger.info('Saved debug incoming image to %s (shape=%s)', debug_path, getattr(img, 'shape', None))
+        logger.info("Saved incoming debug image: %s  shape=%s", debug_path, getattr(img, "shape", None))
     except Exception as ex:
-        logger.warning('Failed to write debug incoming image: %s', ex)
+        logger.warning("Debug save failed: %s", ex)
 
-    # Primary detectors
+    # -----------------------------
+    # 3. Ensure image big enough
+    # -----------------------------
+    h, w = img.shape[:2]
+    min_dim = 720   # recommended for insightface / retinaface
+    max_dim = 1600  # avoid super large
+
+    # AUTO UPSCALE SMALL IMAGES
+    if max(h, w) < min_dim:
+        scale = min_dim / max(h, w)
+        new_w = int(w * scale)
+        new_h = int(h * scale)
+        img = cv2.resize(img, (new_w, new_h), interpolation=cv2.INTER_CUBIC)
+        logger.info("Upscaled image from %dx%d → %dx%d", w, h, new_w, new_h)
+
+    # -----------------------------
+    # 4. Primary detectors
+    # -----------------------------
     faces = detect_face_boxes(img)
-    # If primary detectors found nothing, try an OpenCV Haar-cascade fallback which sometimes
-    # catches frontal faces missed by other detectors (useful for debugging on small images)
+
+    # -----------------------------
+    # 5. Fallback: Haar cascade
+    # -----------------------------
     if not faces:
         try:
-            logger.info('Primary detectors found no faces; trying Haar cascade fallback (insight=%s,retina=%s,mtcnn=%s)', INSIGHTFACE_AVAILABLE, RETINAFACE_AVAILABLE, MTCNN_AVAILABLE)
+            logger.info("Trying Haar cascade fallback...")
             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
-            if os.path.exists(cascade_path):
-                cascade = cv2.CascadeClassifier(cascade_path)
-                gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-                rects = cascade.detectMultiScale(gray, scaleFactor=1.1, minNeighbors=4, minSize=(30, 30))
-                out = []
-                for (x, y, w, h) in rects:
-                    crop = img[max(0, y):y + h, max(0, x):x + w]
-                    out.append({'face': crop, 'bbox': (int(x), int(y), int(x + w), int(y + h)), 'kps': None})
-                if out:
-                    faces = out
-                    logger.info('Haar fallback found %d face(s)', len(out))
+            cascade = cv2.CascadeClassifier(cascade_path)
+
+            gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+            rects = cascade.detectMultiScale(
+                gray,
+                scaleFactor=1.08,
+                minNeighbors=4,
+                minSize=(40, 40)       # enlarged default 30 → 40 for clarity
+            )
+
+            out = []
+            for (x, y, w0, h0) in rects:
+                crop = img[y:y+h0, x:x+w0]
+                out.append({
+                    "face": crop,
+                    "bbox": (int(x), int(y), int(x+w0), int(y+h0)),
+                    "kps": None
+                })
+
+            if out:
+                faces = out
+                logger.info("Haar fallback detected %d faces", len(out))
         except Exception as ex:
-            logger.warning('Haar cascade fallback failed: %s', ex)
+            logger.warning("Haar fallback error: %s", ex)
 
+    # -----------------------------
+    # 6. If still no faces
+    # -----------------------------
     if not faces:
-        return jsonify({'reason': 'no_face_detected', 'descriptor': None}), 200
+        return jsonify({"reason": "no_face_detected", "descriptor": None}), 200
 
+    # -----------------------------
+    # 7. Compute embeddings + liveness
+    # -----------------------------
     results = []
-    for face_entry in faces:  # handle multiple faces
+    for face_entry in faces:
         face_crop = face_entry["face"]
-        descriptor = embed_face(face_crop)
-        liveness_score, lbp_score, blink_score = simple_liveness_checks(face_crop, face_entry.get("kps"))
+        kps = face_entry.get("kps")
+        descriptor = embed_face(face_crop, kps)  # ✅ truyền keypoints
+        liveness_score, lbp_score, blink_score = simple_liveness_checks(
+            face_crop,
+            face_entry.get("kps")
+        )
+
         results.append({
             "descriptor": descriptor,
             "bbox": face_entry.get("bbox"),
-            # Provide multiple aliases so backend heuristic detector can consume
             "livenessScore": liveness_score,
             "liveness": liveness_score,
             "lbp": lbp_score,
             "blink": blink_score,
             "blinkProb": blink_score,
-            # yawDelta not computed here; provide placeholder so backend doesn't see null
             "yawDelta": -1.0
         })
 
@@ -298,18 +441,31 @@ def analyze():
     results = []
     for face_entry in faces:
         face_crop = face_entry["face"]
+        # compute descriptor for matching (may be None if embedder not ready)
+        descriptor = embed_face(face_crop)
+        descriptor_len = len(descriptor) if descriptor is not None else 0
         kps = make_json_serializable(face_entry.get("kps"))
         detection_result = {"ok": True, "bbox": face_entry.get("bbox"), "kps": kps}
         liveness_score, lbp_score, blink_score = simple_liveness_checks(face_crop, kps)
         # include aliases expected by backend heuristics
         liveness_result = {"ok": True, "score": liveness_score, "livenessScore": liveness_score, "lbp": lbp_score, "blink": blink_score, "blinkProb": blink_score, "yawDelta": -1.0}
-        results.append({"detection": detection_result, "liveness": liveness_result})
+
+        # debug log to help tune thresholds; include descriptor length and liveness
+        try:
+            logger.debug('Analyze face: descriptor_len=%s, liveness_score=%s, lbp=%s, blink=%s', descriptor_len, liveness_score, lbp_score, blink_score)
+        except Exception:
+            pass
+
+        results.append({"detection": detection_result, "liveness": liveness_result, "descriptor": descriptor, "descriptor_len": descriptor_len})
 
     # Backwards-compatible top-level fields for single-face clients
     out = {"faces": results}
     if len(results) > 0:
         out["detection"] = results[0]["detection"]
         out["liveness"] = results[0]["liveness"]
+        # expose descriptor info at top-level for single-face clients
+        out["descriptor"] = results[0].get("descriptor")
+        out["descriptor_len"] = results[0].get("descriptor_len", 0)
     else:
         out["detection"] = {"ok": False}
         out["liveness"] = {"ok": False}

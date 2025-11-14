@@ -52,6 +52,7 @@ public class AttendanceService {
             attendance = existing;
             attendance.setUpdatedAt(LocalDateTime.now());
         }
+        attendance.setAttendanceTime(LocalDateTime.now());
 
         // Run face recognition: extract descriptor from image
         java.util.List<Double> descriptor = null;
@@ -180,24 +181,32 @@ public class AttendanceService {
                 if (stored != null) {
                     double bestSim = -1.0;
                     int idx = 0;
+                    double[] probe = new double[descriptor.size()];
+                    for (int i = 0; i < descriptor.size(); i++) probe[i] = descriptor.get(i).doubleValue();
+                    StringBuilder simsLog = new StringBuilder();
                     for (java.util.List<Double> s : stored) {
                         try {
                             // convert to double[]
                             double[] storedArr = new double[s.size()];
                             for (int i = 0; i < s.size(); i++) storedArr[i] = s.get(i).doubleValue();
-                            double[] probe = new double[descriptor.size()];
-                            for (int i = 0; i < descriptor.size(); i++) probe[i] = descriptor.get(i).doubleValue();
                             double sim = com.backend.util.FaceUtils.cosineSimilarity(probe, storedArr);
                             idx++;
+                            simsLog.append(String.format("[idx=%d sim=%.4f]", idx, sim));
                             if (sim > bestSim) bestSim = sim;
-                            double thr = 0.75; // giảm threshold cho dễ test
-                            if (sim >= thr) matched = true;
                         } catch (Exception e) {
                             throw new RuntimeException(e);
                         }
                     }
-                    // compute minDistance as compatibility metric (1 - similarity) to keep legacy note
-                    if (bestSim >= 0) minDist = 1.0 - bestSim;
+                    // decide match using configured threshold from FaceRecognitionService
+                    double thr = faceRecognitionService != null ? faceRecognitionService.getSimilarityThreshold() : 0.75;
+                    if (bestSim >= 0) {
+                        minDist = 1.0 - bestSim;
+                    }
+                    matched = (bestSim >= thr);
+                    // log similarity decision for debugging
+                    try {
+                        System.out.println("Face match sims: " + simsLog.toString() + " bestSim=" + bestSim + " threshold=" + thr + " matched=" + matched);
+                    } catch (Exception ex) {}
                 }
             }
         } catch (Exception ex) {
@@ -244,7 +253,7 @@ public class AttendanceService {
 
         // attach note and status
         attendance.setNote(noteBuilder.toString());
-        attendance.setStatus(matched ? AttendanceStatus.PRESENT : AttendanceStatus.ABSENT);
+        attendance.setStatus(matched ? AttendanceStatus.PRESENT : AttendanceStatus.FAKE_DETECTED);
 
         // Link student and class session if available BEFORE saving (important for FAKE_DETECTED too)
         if (userId != null) userRepository.findById(userId).ifPresent(attendance::setStudent);

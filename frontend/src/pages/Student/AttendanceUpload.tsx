@@ -366,121 +366,140 @@ const AttendanceUpload: React.FC = () => {
   const descriptorToArray = (d: Float32Array) =>
     Array.from(d as any) as number[];
 
-  // primary verify flow: capture from camera (or use uploaded file), compute descriptor, send to backend verify
-  const onVerify = async (e?: React.FormEvent) => {
-    e?.preventDefault();
-    if (!modelsLoaded) {
+const onVerify = async (e?: React.FormEvent) => {
+  e?.preventDefault();
+
+  if (!modelsLoaded) {
+    toast?.show
+      ? toast.show(
+          "Face detection models are still loading. Please wait a moment.",
+          "error"
+        )
+      : console.warn("Toast provider missing: Face models not loaded yet");
+    return;
+  }
+
+  try {
+    setVerifying(true);
+    let descriptor: Float32Array | null = null;
+    let imgEl: HTMLImageElement | null = null;
+
+    // ----- CASE 1: Uploaded photo -----
+    if (photoPreview) {
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = photoPreview;
+      await new Promise((r) => (img.onload = r));
+      imgEl = img;
+
+      try {
+        descriptor = await calcDescriptorFromImageEl(img);
+      } catch {}
+    }
+
+    // ----- CASE 2: Capture from webcam -----
+    else if (videoRef.current) {
+      const video = videoRef.current;
+      const canvas = document.createElement("canvas");
+
+      // Capture full resolution from video stream
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+
+      const ctx = canvas.getContext("2d");
+      ctx!.drawImage(video, 0, 0, canvas.width, canvas.height);
+
+      const blobUrl = canvas.toDataURL("image/jpeg", 0.95);
+
+      const img = new Image();
+      img.crossOrigin = "anonymous";
+      img.src = blobUrl;
+      await new Promise((r) => (img.onload = r));
+
+      imgEl = img;
+
+      try {
+        descriptor = await calcDescriptorFromImageEl(img);
+      } catch {}
+    }
+
+    // No image source
+    else {
+      return toast.show("No image or camera source available.", "error");
+    }
+
+    // Debug info
+    const debugInfo: any = {};
+    debugInfo.descriptor_len = descriptor ? descriptor.length : 0;
+
+    if (!imgEl) throw new Error("Failed to obtain image element");
+
+    // ----- ALWAYS send full-size image -----
+    const canvas = document.createElement("canvas");
+    const w = imgEl.naturalWidth;
+    const h = imgEl.naturalHeight;
+
+    canvas.width = w;
+    canvas.height = h;
+
+    const ctx = canvas.getContext("2d");
+    if (!ctx) throw new Error("Canvas not available");
+
+    ctx.drawImage(imgEl, 0, 0, w, h);
+
+    // Higher quality image for API
+    const dataUrl = canvas.toDataURL("image/jpeg", 0.95);
+
+    setLastVerifyDebug(debugInfo);
+
+    // Call API
+    const res = await StudentService.verifyFaceQuality(dataUrl);
+
+    setLastVerifyDebug((prev: any) => ({ ...prev, server: res }));
+
+    if (res?.valid) {
       toast?.show
         ? toast.show(
-            "Face detection models are still loading. Please wait a moment.",
-            "error"
+            "Face detected successfully. This image is suitable for enrollment.",
+            "success"
           )
-        : console.warn("Toast provider missing: Face models not loaded yet");
-      return;
+        : console.info("Face verified (no toast)");
+
+      setVerified(true);
+    } else {
+      const message =
+        res?.message ||
+        res?.humanMessageVi ||
+        "The face could not be verified. Please try again with better lighting or clearer face.";
+
+      toast?.show ? toast.show(message, "error") : console.warn(message);
+      setVerified(false);
     }
+  } catch (err: any) {
+    console.error(err);
+    const msg = err?.message || "Face quality check failed";
 
-    try {
-      setVerifying(true);
-      let descriptor: Float32Array | null = null;
-      let imgEl: HTMLImageElement | null = null;
+    if (
+      msg.toLowerCase().includes("no face detected") ||
+      msg.toLowerCase().includes("failed to compute descriptor")
+    ) {
+      setLastVerifyDebug({
+        descriptor_len: 0,
+        usedAI: false,
+        minDistance: "-",
+      });
 
-      if (photoPreview) {
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = photoPreview;
-        await new Promise((r) => (img.onload = r));
-        imgEl = img;
-        try {
-          descriptor = await calcDescriptorFromImageEl(img);
-        } catch (e) {}
-      } else if (videoRef.current) {
-        const blobUrl = await captureFromVideo();
-        const img = new Image();
-        img.crossOrigin = "anonymous";
-        img.src = blobUrl;
-        await new Promise((r) => (img.onload = r));
-        imgEl = img;
-        try {
-          descriptor = await calcDescriptorFromImageEl(img);
-        } catch (e) {}
-      } else {
-        return toast.show("No image or camera source available.", "error");
-      }
-
-      const debugInfo: any = {};
-      debugInfo.descriptor_len = descriptor ? descriptor.length : 0;
-
-      if (!imgEl) throw new Error("Failed to obtain image element");
-      const canvas = document.createElement("canvas");
-      const w = imgEl.naturalWidth || imgEl.width || 640;
-      const h = imgEl.naturalHeight || imgEl.height || 480;
-
-      const maxDim = 1200;
-      let targetW = w;
-      let targetH = h;
-      if (Math.max(w, h) > maxDim) {
-        if (w >= h) {
-          targetW = maxDim;
-          targetH = Math.round((h / w) * maxDim);
-        } else {
-          targetH = maxDim;
-          targetW = Math.round((w / h) * maxDim);
-        }
-      }
-      canvas.width = targetW;
-      canvas.height = targetH;
-      const ctx = canvas.getContext("2d");
-      if (!ctx) throw new Error("Canvas not available");
-      ctx.drawImage(imgEl, 0, 0, targetW, targetH);
-
-      const dataUrl = canvas.toDataURL("image/jpeg", 0.85);
-      setLastVerifyDebug(debugInfo);
-
-      // call API
-      const res = await StudentService.verifyFaceQuality(dataUrl);
-      setLastVerifyDebug((prev: any) => ({ ...prev, server: res }));
-      console.log(res);
-      if (res?.valid) {
-        toast?.show
-          ? toast.show(
-              "Face detected successfully. This image is suitable for enrollment.",
-              "success"
-            )
-          : console.info("Face verified (no toast)");
-        setVerified(true);
-
-        // setPhotoPreview(null);
-      } else {
-        const message =
-          res?.message ||
-          res?.humanMessageVi ||
-          "The face could not be verified. Please try again with better lighting or clearer face.";
-        toast?.show ? toast.show(message, "error") : console.warn(message);
-        setVerified(false);
-      }
-    } catch (err: any) {
-      console.error(err);
-      const msg = err?.message || "Face quality check failed";
-      if (
-        String(msg).toLowerCase().includes("no face detected") ||
-        String(msg).toLowerCase().includes("failed to compute descriptor")
-      ) {
-        setLastVerifyDebug({
-          descriptor_len: 0,
-          usedAI: false,
-          minDistance: "-",
-        });
-        toast.show(
-          "No face detected in the image. Make sure your face is clearly visible, with good lighting, and centered in the frame. Try again.",
-          "error"
-        );
-      } else {
-        toast.show(msg, "error");
-      }
-    } finally {
-      setVerifying(false);
+      toast.show(
+        "No face detected in the image. Make sure your face is clearly visible, with good lighting, and centered in the frame. Try again.",
+        "error"
+      );
+    } else {
+      toast.show(msg, "error");
     }
-  };
+  } finally {
+    setVerifying(false);
+  }
+};
 
   const onSubmitPhoto = async (e: React.FormEvent) => {
     e.preventDefault();

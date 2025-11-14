@@ -31,10 +31,10 @@ public class FaceRecognitionService {
     private final FakeDetector fakeDetector;
     private static final Logger log = LoggerFactory.getLogger(FaceRecognitionService.class);
 
-    @Value("${app.face.similarity.threshold:0.6}")
+    @Value("${app.face.similarity.threshold:0.98}")
     private double similarityThreshold;
 
-    @Value("${app.face.liveness.threshold:0.5}")
+    @Value("${app.face.liveness.threshold:0.8}")
     private double livenessThreshold;
 
     @Value("${EMBEDDING_ENCRYPTION_KEY:}")
