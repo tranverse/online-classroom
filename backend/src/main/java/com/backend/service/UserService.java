@@ -9,6 +9,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -50,6 +51,7 @@ public class UserService {
     final ClassSessionRepository sessionRepository;
     final AttendanceRepository attendanceRepository;
     final AttendanceMapper attendanceMapper;
+    private final PasswordEncoder passwordEncoder;
 
     public UserResponse getUserInformation(String email) {
         User user = userRepository.findByEmail(email).orElseThrow(() ->
@@ -62,6 +64,9 @@ public class UserService {
             throw new AppException(ErrorCode.EMAIL_EXISTED);
         }
         User user = userMapper.toUser(userCreateRequest);
+        String defaultPassword = "123";
+        user.setPassword(passwordEncoder.encode(defaultPassword));
+
         return userMapper.toUserResponse(userRepository.save(user));
     }
 

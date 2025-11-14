@@ -85,7 +85,7 @@ const ClassSessionEntry: React.FC = () => {
             setAttendanceInfo(info);
           }}
         />
-        <div className="mt-4">
+        {/* <div className="mt-4">
           <p className="text-sm text-gray-500">
             After successful attendance, click "Enter".
           </p>
@@ -114,7 +114,7 @@ const ClassSessionEntry: React.FC = () => {
           >
             Enter Session
           </button>
-        </div>
+        </div> */}
       </div>
     );
   }

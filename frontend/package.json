@@ -12,6 +12,8 @@
   },
   "dependencies": {
     "@infisical/sdk": "^4.0.5",
+    "@mediapipe/camera_utils": "^0.3.1675466862",
+    "@mediapipe/face_detection": "^0.4.1646425229",
     "@reduxjs/toolkit": "^1.9.7",
     "@tailwindcss/vite": "^4.1.13",
     "antd": "^5.27.4",

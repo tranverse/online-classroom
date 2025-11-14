@@ -190,7 +190,7 @@ public class AttendanceService {
                             double sim = com.backend.util.FaceUtils.cosineSimilarity(probe, storedArr);
                             idx++;
                             if (sim > bestSim) bestSim = sim;
-                            double thr = 0.4; // giảm threshold cho dễ test
+                            double thr = 0.75; // giảm threshold cho dễ test
                             if (sim >= thr) matched = true;
                         } catch (Exception e) {
                             throw new RuntimeException(e);
@@ -219,7 +219,7 @@ public class AttendanceService {
         }
 
         // perform liveness check if analyze metrics present
-        boolean livenessPassed = true;
+        boolean livenessPassed = false;
 
         if (analyzeMetrics != null) {
             try {
@@ -238,7 +238,7 @@ public class AttendanceService {
                     if (livenessMap.get("yawDelta") != null) noteBuilder.append("yawDelta=").append(livenessMap.get("yawDelta")).append(";");
                 }
             } catch (Exception ex) {
-                // ignore
+                livenessPassed = false;
             }
         }
 

@@ -49,7 +49,7 @@ const StudentDashboard: React.FC = () => {
     };
     load();
   }, []);
-
+  console.log(sessions);
   return (
     <div className="w-full  h-full flex justify-center items-start p-6">
       <div className="w-full max-w-5xl h-full bg-white rounded-2xl border border-gray-200 shadow-lg flex flex-col overflow-hidden">
@@ -69,71 +69,73 @@ const StudentDashboard: React.FC = () => {
         <div className="px-6 py-4">
           <div className="max-h-[500px] overflow-y-auto pr-2 space-y-3 scrollbar-thin scrollbar-thumb-emerald-200 scrollbar-track-gray-100">
             {sessions.length ? (
-              sessions.map((s) => (
-                <div
-                  key={s.id}
-                  className="p-4 bg-gray-50 border border-gray-100 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md"
-                >
-                  <div className="flex flex-col space-y-1 text-sm">
-                    <div className="text-base font-semibold text-gray-800 flex items-center gap-2">
-                      <FaChalkboardTeacher className="text-emerald-600" />
-                      {s.title}
+              sessions
+                .filter((s) => s.sessionStatus != "COMPLETED")
+                .map((s) => (
+                  <div
+                    key={s.id}
+                    className="p-4 bg-gray-50 border border-gray-100 rounded-xl flex flex-col md:flex-row justify-between items-start md:items-center hover:bg-emerald-50 transition-all shadow-sm hover:shadow-md"
+                  >
+                    <div className="flex flex-col space-y-1 text-sm">
+                      <div className="text-base font-semibold text-gray-800 flex items-center gap-2">
+                        <FaChalkboardTeacher className="text-emerald-600" />
+                        {s.title}
+                      </div>
+                      <div className="text-gray-600 flex items-center gap-2">
+                        <FaDoorOpen className="text-emerald-500" />
+                        {s.classroom?.name || "Unknown"}
+                      </div>
+                      <div className="text-gray-600 flex items-center gap-2">
+                        <FaUserGraduate className="text-emerald-500" />
+                        {s.teacher || "TBA"}
+                      </div>
+                      <div className="text-gray-500 flex items-center gap-2">
+                        <FaClock className="text-emerald-500" />
+                        {s.start ? `Start: ${s.start}` : "N/A"}
+                      </div>
+                      <div className="text-gray-500 flex items-center gap-2">
+                        <FaClock className="text-emerald-500" />
+                        {s.end ? `End: ${s.end}` : "N/A"}
+                      </div>
                     </div>
-                    <div className="text-gray-600 flex items-center gap-2">
-                      <FaDoorOpen className="text-emerald-500" />
-                      {s.classroom?.name || "Unknown"}
-                    </div>
-                    <div className="text-gray-600 flex items-center gap-2">
-                      <FaUserGraduate className="text-emerald-500" />
-                      {s.teacher || "TBA"}
-                    </div>
-                    <div className="text-gray-500 flex items-center gap-2">
-                      <FaClock className="text-emerald-500" />
-                      {s.start ? `Start: ${s.start}` : "N/A"}
-                    </div>
-                    <div className="text-gray-500 flex items-center gap-2">
-                      <FaClock className="text-emerald-500" />
-                      {s.end ? `End: ${s.end}` : "N/A"}
-                    </div>
+
+                    {(() => {
+                      const now = new Date();
+
+                      // Dùng ISO string từ backend
+                      const startTime = s.startTime
+                        ? new Date(s.startTime)
+                        : null;
+                      const endTime = s.endTime
+                        ? new Date(s.endTime)
+                        : addMinutes(startTime, 90);
+
+                      const diffStart = differenceInMinutes(startTime, now);
+
+                      const isBeforeAndNearStart =
+                        diffStart <= 10 && diffStart >= 0;
+                      const isDuringClass = now >= startTime && now <= endTime;
+
+                      const canJoin = isBeforeAndNearStart || isDuringClass;
+
+                      return (
+                        <Link
+                          to={canJoin ? `/classroom/online/${s.id}` : "#"}
+                          className={`mt-3 md:mt-0 px-5 py-2 text-sm rounded-lg shadow transition-all ${
+                            canJoin
+                              ? "bg-emerald-500 text-white hover:bg-emerald-600 hover:shadow-md"
+                              : "bg-gray-300 text-gray-500 cursor-not-allowed"
+                          }`}
+                          onClick={(e) => {
+                            if (!canJoin) e.preventDefault();
+                          }}
+                        >
+                          {canJoin ? "Join Now" : "Not Yet"}
+                        </Link>
+                      );
+                    })()}
                   </div>
-
-                  {(() => {
-                    const now = new Date();
-
-                    // Dùng ISO string từ backend
-                    const startTime = s.startTime
-                      ? new Date(s.startTime)
-                      : null;
-                    const endTime = s.endTime
-                      ? new Date(s.endTime)
-                      : addMinutes(startTime, 90);
-
-                    const diffStart = differenceInMinutes(startTime, now);
-
-                    const isBeforeAndNearStart =
-                      diffStart <= 10 && diffStart >= 0;
-                    const isDuringClass = now >= startTime && now <= endTime;
-
-                    const canJoin = isBeforeAndNearStart || isDuringClass;
-
-                    return (
-                      <Link
-                        to={canJoin ? `/classroom/online/${s.id}` : "#"}
-                        className={`mt-3 md:mt-0 px-5 py-2 text-sm rounded-lg shadow transition-all ${
-                          canJoin
-                            ? "bg-emerald-500 text-white hover:bg-emerald-600 hover:shadow-md"
-                            : "bg-gray-300 text-gray-500 cursor-not-allowed"
-                        }`}
-                        onClick={(e) => {
-                          if (!canJoin) e.preventDefault();
-                        }}
-                      >
-                        {canJoin ? "Join Now" : "Not Yet"}
-                      </Link>
-                    );
-                  })()}
-                </div>
-              ))
+                ))
             ) : (
               <div className="text-gray-500 text-center py-10 border border-dashed border-gray-300 rounded-xl bg-gray-50 text-sm">
                 No upcoming sessions found.
