@@ -680,10 +680,39 @@ const Whiteboard: React.FC = () => {
           id,
           hasStream: !!stream,
         });
-        if (stream) {
-          setSharingStream(stream);
-          if (id) setSharingBy(id);
+        if (!stream) return;
+
+        // Heuristic: accept only display-like streams (avoid camera)
+        let isDisplay = false;
+        try {
+          const vtracks = stream.getVideoTracks() || [];
+          for (const t of vtracks) {
+            try {
+              const s = (t as any).getSettings
+                ? (t as any).getSettings()
+                : null;
+              if (s && (s.displaySurface || s.mediaSource)) {
+                isDisplay = true;
+                break;
+              }
+              const label = (t as any).label || "";
+              if (/screen|display|monitor|window/i.test(label)) {
+                isDisplay = true;
+                break;
+              }
+            } catch (e) {}
+          }
+        } catch (e) {}
+
+        if (!isDisplay) {
+          console.debug("Whiteboard: ignoring non-display remote stream", {
+            id,
+          });
+          return;
         }
+
+        setSharingStream(stream);
+        if (id) setSharingBy(id);
       } catch (e) {}
     };
     const onLocal = (ev: any) => {
@@ -897,48 +926,6 @@ const Whiteboard: React.FC = () => {
           onTouchEnd={stop}
         />
         {/* overlay shared screen on top of canvas but allow drawing (pointer-events none) */}
-        {sharingBy && (
-          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 pointer-events-none">
-            {sharingStream ? (
-              <div className="w-full h-full relative pointer-events-none">
-                <video
-                  autoPlay
-                  playsInline
-                  muted={sharingBy !== socket?.id}
-                  className="w-full h-full object-contain"
-                  ref={sharedVideoRef}
-                />
-                {/* clickable fallback button for autoplay-restricted browsers (button must accept pointer events) */}
-                {sharingBy !== socket?.id && (
-                  <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
-                    <button
-                      className="px-4 py-2 bg-white text-black rounded shadow"
-                      onClick={() => {
-                        try {
-                          const v = sharedVideoRef.current;
-                          if (!v) return;
-                          v.muted = false;
-                          v.play().catch((err) =>
-                            console.warn("play failed", err)
-                          );
-                          console.debug(
-                            "Whiteboard: user initiated play for shared stream"
-                          );
-                        } catch (err) {
-                          console.warn("click to view failed", err);
-                        }
-                      }}
-                    >
-                      Click to view
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="text-white">{`${sharingBy} is sharing`}</div>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

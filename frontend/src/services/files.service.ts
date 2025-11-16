@@ -16,9 +16,12 @@ const FilesService = {
     form.append("file", file);
     if (folderId) form.append("folderId", folderId);
     if (classroomId) form.append("classroomId", classroomId);
-    const url = `${BASE}/upload${folderId ? `?folderId=${folderId}` : ""}${
-      classroomId && !folderId ? `?classroomId=${classroomId}` : ""
-    }`;
+
+    const params = new URLSearchParams();
+    if (folderId) params.append("folderId", folderId);
+    if (classroomId) params.append("classroomId", classroomId);
+    const query = params.toString();
+    const url = `${BASE}/upload${query ? `?${query}` : ""}`;
     console.debug("FilesService.uploadFile: url=", url);
     try {
       const keys: string[] = [];

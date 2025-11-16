@@ -2,140 +2,153 @@ import { Socket } from "socket.io-client";
 
 export type PeerMap = Record<string, RTCPeerConnection>;
 
+type CreatePeerOptions = {
+  extraIcePayload?: Record<string, any>;
+};
+
 export function createPeerConnection(
-  socket: Socket,
-  localStream: MediaStream | null | undefined,
-  remoteHandler: (id: string, stream: MediaStream) => void
+  socket: Socket | any,
+  localStream: MediaStream | null,
+  onRemoteStream?: (id: string, stream: MediaStream) => void,
+  options?: CreatePeerOptions
 ) {
   const pc = new RTCPeerConnection({
     iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
   });
 
-  // add local tracks
-  if (localStream) {
-    const tracks = localStream.getTracks();
-    console.log(
-      "webrtc: adding local tracks",
-      tracks.map((t) => t.kind)
-    );
-    tracks.forEach((t) => {
-      try {
-        const sender = pc.addTrack(t, localStream as MediaStream);
-        console.debug("webrtc: added track sender", { kind: t.kind, sender });
-      } catch (e) {
-        console.warn("webrtc: addTrack failed", e);
-      }
-    });
-  }
-
-  pc.onicecandidate = (e) => {
-    if (e.candidate) {
-      console.log(
-        "webrtc:onicecandidate -> emit",
-        (pc as any)["_remoteId"],
-        e.candidate
-      );
-      (socket as any).emit("webrtc:ice", {
-        to: (pc as any)["_remoteId"],
-        candidate: e.candidate,
-      });
-    }
-  };
-
-  pc.ontrack = (e) => {
-    // Some browsers may not populate `e.streams`; build a MediaStream from incoming tracks
-    let remoteStream = e.streams && e.streams[0];
-    try {
-      if (!remoteStream) {
-        // create or reuse a stream object attached to the pc instance
-        (pc as any)["_remoteStream"] =
-          (pc as any)["_remoteStream"] || new MediaStream();
-        if (e.track)
-          (pc as any)["_remoteStream"].addTrack(e.track as MediaStreamTrack);
-        remoteStream = (pc as any)["_remoteStream"];
-      }
-    } catch (err) {
-      console.warn("webrtc:ontrack build stream failed", err);
-    }
-    console.log(
-      "webrtc:ontrack",
-      (pc as any)["_remoteId"],
-      remoteStream ? true : false
-    );
-    try {
-      console.debug(
-        "webrtc:ontrack pc senders",
-        (pc as any)["_remoteId"],
-        pc
-          .getSenders()
-          .map((s) => ({ kind: s.track?.kind, id: (s.track as any)?.id }))
-      );
-      console.debug(
-        "webrtc:ontrack pc transceivers",
-        (pc as any)["_remoteId"],
-        pc
-          .getTransceivers()
-          .map((t) => ({
-            kind: t.receiver.track?.kind,
-            direction: t.direction,
-          }))
-      );
-    } catch (e) {}
-    if (remoteStream) {
-      try {
-        remoteHandler((pc as any)["_remoteId"], remoteStream as MediaStream);
-      } catch (err) {
-        console.warn("webrtc:remoteHandler failed", err);
-      }
-    }
-  };
+  // bookkeeping
+  (pc as any)._remoteId = null;
+  let remoteSet = false;
+  const queuedCandidates: RTCIceCandidateInit[] = [];
+  const remoteStream = new MediaStream();
 
   pc.oniceconnectionstatechange = () => {
     try {
-      console.log(
-        "webrtc:iceConnectionState",
-        (pc as any)["_remoteId"],
-        pc.iceConnectionState
-      );
+      console.debug("[webrtc] iceConnectionState", {
+        id: (pc as any)._remoteId,
+        state: pc.iceConnectionState,
+      });
+    } catch (e) {}
+  };
+
+  pc.onicecandidate = (ev) => {
+    try {
+      console.debug("[webrtc] onicecandidate", {
+        id: (pc as any)._remoteId,
+        candidate: ev.candidate,
+      });
+      if (ev.candidate) {
+        const to = (pc as any)._remoteId;
+        if (socket && to)
+          socket.emit("webrtc:ice", {
+            to,
+            candidate: ev.candidate,
+            ...(options?.extraIcePayload || {}),
+          });
+      }
+    } catch (e) {}
+  };
+
+  pc.ontrack = (ev) => {
+    try {
+      console.debug("[webrtc] ontrack event", {
+        id: (pc as any)._remoteId,
+        ev,
+      });
+      ev.streams?.forEach((s: MediaStream) => {
+        s.getTracks().forEach((t) => {
+          try {
+            remoteStream.addTrack(t);
+          } catch (e) {}
+        });
+      });
+      if (ev.track && !ev.streams?.length) {
+        try {
+          remoteStream.addTrack(ev.track);
+        } catch (e) {}
+      }
+      const rid = (pc as any)._remoteId;
+      if (onRemoteStream && rid) onRemoteStream(rid, remoteStream);
       try {
-        console.debug(
-          "webrtc:pc senders on ice state change",
-          (pc as any)["_remoteId"],
-          pc
-            .getSenders()
-            .map((s) => ({ kind: s.track?.kind, id: (s.track as any)?.id }))
-        );
-        console.debug(
-          "webrtc:pc transceivers on ice state change",
-          (pc as any)["_remoteId"],
-          pc
-            .getTransceivers()
-            .map((t) => ({
-              mid: t.mid,
-              direction: t.direction,
-              senderKind: t.sender && t.sender.track?.kind,
-              receiverKind: t.receiver && t.receiver.track?.kind,
-            }))
-        );
+        if (rid) {
+          window.dispatchEvent(
+            new CustomEvent("screen:participant-remote-stream", {
+              detail: { id: rid, stream: remoteStream },
+            } as any)
+          );
+          console.debug(
+            "[webrtc] dispatched screen:participant-remote-stream",
+            { rid, tracks: remoteStream.getTracks().map((t) => t.kind) }
+          );
+        }
       } catch (e) {}
-    } catch (e) {}
+    } catch (e) {
+      console.error("[webrtc] ontrack err", e);
+    }
   };
 
-  pc.onconnectionstatechange = () => {
+  // safe setRemoteDescription + flush candidates
+  (pc as any).safeSetRemoteDescription = async (
+    desc: RTCSessionDescriptionInit
+  ) => {
     try {
-      console.log(
-        "webrtc:connectionState",
-        (pc as any)["_remoteId"],
-        pc.connectionState
+      console.debug("[webrtc] safeSetRemoteDescription start", {
+        id: (pc as any)._remoteId,
+        descType: desc?.type,
+      });
+      await pc.setRemoteDescription(desc);
+      remoteSet = true;
+      // flush queued
+      for (const c of queuedCandidates) {
+        try {
+          await pc.addIceCandidate(new RTCIceCandidate(c));
+        } catch (e) {
+          console.warn("[webrtc] queued addIceCandidate failed", e);
+        }
+      }
+      queuedCandidates.length = 0;
+      console.debug(
+        "[webrtc] safeSetRemoteDescription done & flushed candidates",
+        { id: (pc as any)._remoteId }
       );
-    } catch (e) {}
+    } catch (e) {
+      console.error("[webrtc] safeSetRemoteDescription error", e);
+      throw e;
+    }
   };
 
-  pc.onnegotiationneeded = () => {
+  (pc as any).safeAddIceCandidate = async (cand: RTCIceCandidateInit) => {
     try {
-      console.log("webrtc:onnegotiationneeded", (pc as any)["_remoteId"]);
-    } catch (e) {}
+      if (!cand) return;
+      if (!remoteSet) {
+        queuedCandidates.push(cand);
+        console.debug("[webrtc] queued ICE candidate", {
+          id: (pc as any)._remoteId,
+        });
+        return;
+      }
+      await pc.addIceCandidate(new RTCIceCandidate(cand));
+      console.debug("[webrtc] added ICE candidate", {
+        id: (pc as any)._remoteId,
+      });
+    } catch (e) {
+      console.warn("[webrtc] safeAddIceCandidate failed", e);
+    }
   };
 
-  return pc;
+  // add local tracks if present
+  if (localStream) {
+    try {
+      localStream.getTracks().forEach((t) => pc.addTrack(t, localStream));
+      console.debug("[webrtc] added local tracks", {
+        count: localStream.getTracks().length,
+      });
+    } catch (e) {}
+  }
+
+  return pc as RTCPeerConnection & {
+    _remoteId?: string | null;
+    safeSetRemoteDescription?: (d: RTCSessionDescriptionInit) => Promise<void>;
+    safeAddIceCandidate?: (c: RTCIceCandidateInit) => Promise<void>;
+  };
 }

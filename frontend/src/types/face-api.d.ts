@@ -347,99 +347,44 @@ declare module "face-api.js";
   //   }
   // };
 
-
-  
-  // const captureAndSend = async () => {
-  //   if (!videoRef.current || !canvasRef.current) return;
-  //   setCapturing(true);
-  //   capturingRef.current = true;
-  //   setDetectionStatus("running");
-  //   setLivenessStatus("idle");
-  //   setLivenessFailed(false);
-
-  //   const video = videoRef.current;
-  //   const canvas = canvasRef.current;
-  //   const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  //   if (!ctx) return setCapturing(false);
-
-  //   canvas.width = video.videoWidth || 640;
-  //   canvas.height = video.videoHeight || 480;
-  //   ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-  //   const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-
-  //   try {
-  //     // call analyze API như trước
-  //     const analyzeResp = await axios
-  //       .post("http://localhost:5001/analyze", {
-  //         imageBase64: dataUrl.split(",")[1],
-  //         wantDescriptor: true,
-  //       })
-  //       .then((r) => r.data);
-  //     console.log("analyzeResp", analyzeResp);
-  //     if (!analyzeResp || !analyzeResp.detection?.ok) {
-  //       setDetectionStatus("failed");
-  //       toast?.show
-  //         ? toast.show(
-  //             "No face detected. Please ensure your face is clearly visible.",
-  //             "error"
-  //           )
-  //         : console.error("No face detected");
-  //       setCapturing(false);
-  //       capturingRef.current = false;
-  //       return;
-  //     }
-  //     console.log("analyzeResp", analyzeResp);
-  //     console.log("dataUrl", dataUrl);
-
-  //     setDetectionStatus("success");
-  //     setLivenessStatus("success");
-
-  //     // send attendance
-  //     const resp = await axios.post(
-  //       `/api/class-session/${classSessionId}/attendance`,
-  //       {
-  //         imageBase64: dataUrl.split(",")[1],
-  //         analyzeMetrics: analyzeResp,
-  //       }
-  //     );
-  //     console.log("resp", resp);
-  //     const info = resp.data?.data;
-
-  //     if (info?.isPassed || info?.status === "PRESENT") {
-  //       setDone(true);
-  //       toast?.show?.("Attendance verified — marked present ✅", "success");
-
-  //       // stop camera
-  //       if (videoRef.current?.srcObject) {
-  //         const tracks = (
-  //           videoRef.current.srcObject as MediaStream
-  //         ).getTracks();
-  //         tracks.forEach((t) => t.stop());
-  //         videoRef.current.srcObject = null;
-  //       }
-
-  //       // call callback nếu có
-  //       if (typeof onSuccess === "function") onSuccess(info);
-  //     } else {
-  //       toast?.show?.(
-  //         "Attendance failed: face not recognized or liveness failed ❌",
-  //         "error"
-  //       );
-
-  //       // parse suggestions từ analyzeResp, nếu muốn
-  //       const map: Record<string, any> = analyzeResp?.detection || {};
-  //       if (map["minDistance"] || map["liveness"] === "false") {
-  //         toast?.show?.(
-  //           "Try adjusting your face position or lighting and capture again.",
-  //           "error"
-  //         );
-  //       }
-  //     }
-  //   } catch (err: any) {
-  //     console.error(err);
-  //     toast?.show?.("Error during capture or verification ❌", "error");
-  //   } finally {
-  //     setCapturing(false);
-  //     capturingRef.current = false;
-  //   }
-  // };
+        {/* {sharingBy && (
+          <div className="absolute inset-0 z-40 flex items-center justify-center bg-black/40 pointer-events-none">
+            {sharingStream ? (
+              <div className="w-full h-full relative pointer-events-none">
+                <video
+                  autoPlay
+                  playsInline
+                  muted={sharingBy !== socket?.id}
+                  className="w-full h-full object-contain"
+                  ref={sharedVideoRef}
+                />
+                {sharingBy !== socket?.id && (
+                  <div className="absolute inset-0 flex items-center justify-center pointer-events-auto">
+                    <button
+                      className="px-4 py-2 bg-white text-black rounded shadow"
+                      onClick={() => {
+                        try {
+                          const v = sharedVideoRef.current;
+                          if (!v) return;
+                          v.muted = false;
+                          v.play().catch((err) =>
+                            console.warn("play failed", err)
+                          );
+                          console.debug(
+                            "Whiteboard: user initiated play for shared stream"
+                          );
+                        } catch (err) {
+                          console.warn("click to view failed", err);
+                        }
+                      }}
+                    >
+                      Click to view
+                    </button>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="text-white">{`${sharingBy} is sharing`}</div>
+            )}
+          </div>
+        )} */}

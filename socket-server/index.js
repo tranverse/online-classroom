@@ -205,18 +205,18 @@ io.on("connection", (socket) => {
     );
   });
 
-  socket.on("webrtc:offer", ({ to, sdp }) => {
-    console.log("webrtc:offer from", socket.id, "to", to);
-    io.to(to).emit("webrtc:offer", { from: socket.id, sdp });
+  socket.on("webrtc:offer", ({ to, sdp, kind }) => {
+    console.log("webrtc:offer from", socket.id, "to", to, "kind=", kind);
+    io.to(to).emit("webrtc:offer", { from: socket.id, sdp, kind });
   });
 
-  socket.on("webrtc:answer", ({ to, sdp }) => {
-    console.log("webrtc:answer from", socket.id, "to", to);
-    io.to(to).emit("webrtc:answer", { from: socket.id, sdp });
+  socket.on("webrtc:answer", ({ to, sdp, kind }) => {
+    console.log("webrtc:answer from", socket.id, "to", to, "kind=", kind);
+    io.to(to).emit("webrtc:answer", { from: socket.id, sdp, kind });
   });
 
-  socket.on("webrtc:ice", ({ to, candidate }) => {
-    io.to(to).emit("webrtc:ice", { from: socket.id, candidate });
+  socket.on("webrtc:ice", ({ to, candidate, kind }) => {
+    io.to(to).emit("webrtc:ice", { from: socket.id, candidate, kind });
   });
 
   socket.on("participants:get", async ({ room }) => {

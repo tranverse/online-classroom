@@ -19,12 +19,14 @@ public class ResourceService {
     private final ResourceRepository resourceRepository;
     private final FolderRepository folderRepository;
     private final com.backend.repository.ResourceClassroomRepository resourceClassroomRepository;
+    private final com.backend.repository.ClassroomRepository classroomRepository;
     private static final Logger log = LoggerFactory.getLogger(ResourceService.class);
 
-    public ResourceService(ResourceRepository resourceRepository, FolderRepository folderRepository, com.backend.repository.ResourceClassroomRepository resourceClassroomRepository) {
+    public ResourceService(ResourceRepository resourceRepository, FolderRepository folderRepository, com.backend.repository.ResourceClassroomRepository resourceClassroomRepository, com.backend.repository.ClassroomRepository classroomRepository) {
         this.resourceRepository = resourceRepository;
         this.folderRepository = folderRepository;
         this.resourceClassroomRepository = resourceClassroomRepository;
+        this.classroomRepository = classroomRepository;
     }
 
     public Resource saveResourceMetadata(String name, String storagePath, String mimeType, Long size, String folderId, String classroomId, User user) {
@@ -43,14 +45,14 @@ public class ResourceService {
         // if classroomId provided, create link
         if (classroomId != null && !classroomId.isBlank()) {
             try {
-                com.backend.model.Classroom c = new com.backend.model.Classroom();
-                c.setId(classroomId);
-                com.backend.model.ResourceClassroom link = new com.backend.model.ResourceClassroom();
-                link.setResource(saved);
-                link.setClassroom(c);
-                resourceClassroomRepository.save(link);
+                classroomRepository.findById(classroomId).ifPresentOrElse(classroom -> {
+                    com.backend.model.ResourceClassroom link = new com.backend.model.ResourceClassroom();
+                    link.setResource(saved);
+                    link.setClassroom(classroom);
+                    resourceClassroomRepository.save(link);
+                }, () -> log.warn("Classroom {} not found when linking resource {}", classroomId, saved.getId()));
             } catch (Exception ex) {
-                log.warn("Failed to create ResourceClassroom link: {}", ex.getMessage());
+                log.warn("Failed to create ResourceClassroom link for classroom {}: {}", classroomId, ex.getMessage());
             }
         }
         return saved;

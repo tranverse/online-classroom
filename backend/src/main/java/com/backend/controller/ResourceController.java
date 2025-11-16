@@ -68,6 +68,7 @@ public class ResourceController {
 
             // Save file bytes to local uploads folder
             try {
+                System.out.println("uploadResource: received file name=" + file.getOriginalFilename() + ", size=" + file.getSize() + " bytes, contentType=" + file.getContentType());
                 java.nio.file.Path uploadsDir = java.nio.file.Paths.get("uploads");
                 java.nio.file.Files.createDirectories(uploadsDir);
                 String filename = java.util.UUID.randomUUID().toString() + "_" + java.nio.file.Paths.get(file.getOriginalFilename()).getFileName().toString();
